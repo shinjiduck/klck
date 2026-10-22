@@ -4,11 +4,12 @@
 // AC-F1-02: tối đa 3 phương án phân biệt rõ, mỗi phương án có lý do và chi phí ước tính kèm ghi chú
 // "chi phí ước tính, chưa được nhà cung cấp xác nhận". FR-F1-03: trạng thái khả thi + số điểm mỗi ngày.
 // AC-F1-04: phương án vi phạm ràng buộc không được gắn "Khả thi"; người dùng chỉ chọn được khi
-// chấp nhận ngoại lệ. UC-04 bước 5: chưa đăng nhập → bản nháp chỉ lưu trên trình duyệt (UX-08 làm sau).
+// chấp nhận ngoại lệ. UC-04 bước 5: chọn phương án khi chưa đăng nhập → yêu cầu đăng nhập để lưu;
+// hành động được giữ lại và thực hiện tiếp sau khi đăng nhập (AC-F8.3-01).
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, Info, Pencil, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
@@ -18,13 +19,60 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { BUDGET_LABEL, PACE_LABEL, TRAVEL_WITH_LABEL, WEEKDAY_SHORT } from "@/lib/labels";
 import { formatVnd, weekdayOf } from "@/lib/places";
 import { generatePlans } from "@/lib/reco/generate-plans";
-import { selectPlan, useTripDraft } from "@/lib/trip-draft";
+import { AccountButton } from "@/components/account-button";
+import { needsLogin, useAuth } from "@/lib/auth";
+import { setPendingAction, takePendingAction } from "@/lib/pending-action";
+import { readTripDraft, selectPlan, useTripDraft } from "@/lib/trip-draft";
+import { saveDraftToServer } from "@/lib/trip-sync";
 import type { GeneratedPlan, Place, TripInput } from "@/lib/types";
 
 export function PlansView({ places }: { places: Place[] }) {
+  const router = useRouter();
+  const auth = useAuth();
   const draft = useTripDraft();
   const placesById = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
-  const plans = useMemo(() => (draft ? generatePlans(draft.input, places) : []), [draft, places]);
+  // Sinh lại theo đầu vào; không phụ thuộc vào phương án đã chọn để danh sách không đổi khi chọn.
+  const inputKey = draft ? JSON.stringify(draft.input) : "";
+  const plans = useMemo(
+    () => (inputKey ? generatePlans(JSON.parse(inputKey) as TripInput, places) : []),
+    [inputKey, places],
+  );
+
+  const choose = useCallback(
+    async (plan: GeneratedPlan) => {
+      if (needsLogin(auth)) {
+        setPendingAction({ type: "select_plan", plan_type: plan.plan_type });
+        toast.info("Đăng nhập để lưu chuyến đi", { description: "Sau khi đăng nhập, phương án này sẽ được chọn tiếp." });
+        router.push("/login?next=/plans");
+        return;
+      }
+      selectPlan(plan);
+      if (auth.status === "signed_in") {
+        try {
+          await saveDraftToServer(readTripDraft()!, auth.user.id);
+          toast.success(`Đã lưu "${plan.title}" vào tài khoản`);
+        } catch (e) {
+          console.error(e);
+          toast.error("Đã chọn trên máy nhưng chưa lưu được lên tài khoản. Thử lại sau.");
+        }
+      } else {
+        toast.success(`Đã chọn "${plan.title}"`);
+      }
+      router.push("/trip");
+    },
+    [auth, router],
+  );
+
+  // Quay lại sau khi đăng nhập: làm tiếp hành động "chọn phương án" đang chờ.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumed.current || auth.status !== "signed_in" || plans.length === 0) return;
+    const pending = takePendingAction("select_plan");
+    if (!pending) return;
+    resumed.current = true;
+    const plan = plans.find((p) => p.plan_type === pending.plan_type);
+    if (plan) void choose(plan);
+  }, [auth.status, plans, choose]);
 
   if (draft === undefined) return <PlansSkeleton />;
   if (draft === null) {
@@ -43,7 +91,10 @@ export function PlansView({ places }: { places: Place[] }) {
     <div className="h-full overflow-y-auto">
       <div className="space-y-4 px-4 pt-5 pb-6">
         <header>
-          <h1 className="text-xl font-semibold">Chọn 1 trong 3 phương án</h1>
+          <div className="flex items-start justify-between gap-2">
+            <h1 className="text-xl font-semibold">Chọn 1 trong 3 phương án</h1>
+            <AccountButton className="shrink-0" />
+          </div>
           <InputSummary input={draft.input} />
         </header>
 
@@ -53,13 +104,18 @@ export function PlansView({ places }: { places: Place[] }) {
             plan={plan}
             placesById={placesById}
             selected={draft.selected?.plan_type === plan.plan_type}
+            onChoose={choose}
           />
         ))}
 
-        <p className="flex gap-1.5 text-xs text-muted-foreground">
-          <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-          Bạn chưa đăng nhập: phương án đã chọn chỉ lưu trên trình duyệt này.
-        </p>
+        {auth.status !== "signed_in" && (
+          <p className="flex gap-1.5 text-xs text-muted-foreground">
+            <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+            {auth.status === "disabled"
+              ? "Chế độ dữ liệu giả: phương án đã chọn chỉ lưu trên trình duyệt này."
+              : "Bạn xem 3 phương án không cần tài khoản. Khi chọn, HueTrip sẽ yêu cầu đăng nhập để lưu chuyến đi."}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -89,22 +145,18 @@ function PlanCard({
   plan,
   placesById,
   selected,
+  onChoose,
 }: {
   plan: GeneratedPlan;
   placesById: Map<string, Place>;
   selected: boolean;
+  onChoose: (plan: GeneratedPlan) => void;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const errors = plan.issues.filter((i) => i.severity === "error");
   const warnings = plan.issues.filter((i) => i.severity === "warning");
-
-  function choose() {
-    selectPlan(plan);
-    toast.success(`Đã chọn "${plan.title}"`);
-    router.push("/trip");
-  }
+  const choose = () => onChoose(plan);
 
   return (
     <article className={cn("rounded-xl border bg-card p-4 shadow-sm", selected && "border-primary ring-1 ring-primary")}>

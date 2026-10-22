@@ -26,6 +26,8 @@ import {
   getPriceText,
 } from "@/lib/places";
 import type { Category, LatLng, Place, PlaceMatch } from "@/lib/types";
+import { needsLogin, useAuth } from "@/lib/auth";
+import { setPendingAction } from "@/lib/pending-action";
 import { AddToTrip, type TripContext } from "./add-to-trip";
 import { OPEN_TONE } from "./place-list-sheet";
 
@@ -41,6 +43,8 @@ type Props = {
   places: Place[];
   /** Gọi sau khi thêm điểm thành công. */
   onAdded: (dayNo: number) => void;
+  /** Mở thẳng bước "Thêm vào lịch" (quay lại sau khi đăng nhập – AC-F8.3-01). */
+  startAdding?: boolean;
 };
 
 export function PlaceCard({ place, onClose, ...rest }: Props) {
@@ -54,9 +58,17 @@ export function PlaceCard({ place, onClose, ...rest }: Props) {
   );
 }
 
-function CardInner({ place, trip, places, onAdded, ...rest }: Omit<Props, "place" | "onClose"> & { place: Place }) {
+function CardInner({
+  place,
+  trip,
+  places,
+  onAdded,
+  startAdding = false,
+  ...rest
+}: Omit<Props, "place" | "onClose"> & { place: Place }) {
   const router = useRouter();
-  const [adding, setAdding] = useState(false);
+  const auth = useAuth();
+  const [adding, setAdding] = useState(startAdding);
 
   if (adding && trip) {
     return <AddToTrip place={place} trip={trip} places={places} onBack={() => setAdding(false)} onDone={onAdded} />;
@@ -66,7 +78,12 @@ function CardInner({ place, trip, places, onAdded, ...rest }: Omit<Props, "place
       place={place}
       {...rest}
       onAdd={() => {
-        if (trip) setAdding(true);
+        if (needsLogin(auth)) {
+          // Ma trận quyền: khách không thêm điểm vào lịch → giữ hành động, đăng nhập xong quay lại đúng địa điểm.
+          setPendingAction({ type: "add_place", place_id: place.id });
+          toast.info("Đăng nhập để thêm vào lịch", { description: "Sau khi đăng nhập, bạn sẽ quay lại đúng địa điểm này." });
+          router.push(`/login?next=${encodeURIComponent(`/map?place=${place.id}`)}`);
+        } else if (trip) setAdding(true);
         else
           toast.info("Bạn chưa có lịch trình", {
             description: "Khai sở thích để nhận 3 phương án, rồi thêm điểm từ bản đồ.",

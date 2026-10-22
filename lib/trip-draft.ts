@@ -1,8 +1,9 @@
 "use client";
 
-// Bản nháp chuyến đi lưu trên trình duyệt (GĐ1, chưa nối Supabase).
+// Bản nháp chuyến đi trên trình duyệt.
 // FR-F1-01 / AC-F1-01: khách xem và tạo bản nháp không cần tài khoản.
-// Khi có đăng nhập (UX-08) sẽ chuyển bản nháp này lên bảng trips / trip_versions.
+// Đã đăng nhập: đây là bản sao của chuyến đi trên Supabase (lib/trip-sync.ts), `server` ghi
+// trip_id + version_no để lưu phiên bản tiếp theo có khóa lạc quan (BR-VERSION-01).
 
 import { useSyncExternalStore } from "react";
 import { DATA_SOURCE } from "@/lib/supabase/env";
@@ -17,6 +18,8 @@ export type TripDraft = {
   /** Phương án người dùng đã chọn ở UX-04 (ảnh chụp tại thời điểm chọn). */
   selected: GeneratedPlan | null;
   updated_at: string;
+  /** Có khi chuyến đi đã lưu lên Supabase. */
+  server?: { trip_id: string; version_no: number; user_id: string };
 };
 
 const listeners = new Set<() => void>();
@@ -71,7 +74,24 @@ export function saveTripInput(input: TripInput) {
   const prev = read();
   // Đổi đầu vào thì phương án đã chọn cũ không còn đúng.
   const same = prev && JSON.stringify(prev.input) === JSON.stringify(input);
-  write({ input, selected: same ? prev.selected : null, updated_at: new Date().toISOString() });
+  // Giữ liên kết với chuyến đi trên server: lần lưu sau sẽ là phiên bản mới của cùng chuyến.
+  write({ input, selected: same ? prev.selected : null, updated_at: new Date().toISOString(), server: prev?.server });
+}
+
+/** Đọc bản nháp hiện tại ngoài React (dùng khi đồng bộ). */
+export function readTripDraft(): TripDraft | null {
+  return read();
+}
+
+/** Thay toàn bộ bản nháp (ví dụ: nạp chuyến đi từ Supabase khi đăng nhập). */
+export function replaceTripDraft(next: TripDraft | null) {
+  write(next);
+}
+
+/** Ghi nhận phiên bản vừa lưu thành công lên server. */
+export function setServerInfo(server: NonNullable<TripDraft["server"]>) {
+  const prev = read();
+  if (prev) write({ ...prev, server });
 }
 
 export function selectPlan(plan: GeneratedPlan) {

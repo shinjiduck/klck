@@ -4,7 +4,7 @@
 // FR-F8-08; AC-F8.3-05 (hỏi ngày, gợi ý khung giờ trống hợp giờ mở cửa), AC-F8.3-02 (cảnh báo trùng
 // trong ngày trước khi thêm), AC-F8.3-03 (hiện xung đột + ít nhất một cách xử lý nếu tìm được:
 // đổi giờ, đổi ngày, vẫn thêm), AC-F8.3-04 (lưu xong lịch và tuyến cập nhật không tải lại trang).
-// Lưu lịch: bản nháp trên trình duyệt (GĐ1 chưa có đăng nhập → AC-F8.3-01 làm cùng UX-08).
+// Lưu lịch: cập nhật bản nháp trên máy, đã đăng nhập thì lưu phiên bản mới lên Supabase (BR-VERSION-01).
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { fmtMin } from "@/lib/places";
-import { updateSelectedPlan } from "@/lib/trip-draft";
+import { useAuth } from "@/lib/auth";
+import { replaceTripDraft } from "@/lib/trip-draft";
+import { TripConflictError, commitPlan, loadLatestTrip } from "@/lib/trip-sync";
 import { defaultDuration, previewInsert, suggestSlots, type InsertPreview, type Slot } from "@/lib/trip-edit";
 import type { GeneratedPlan, Place, TripInput } from "@/lib/types";
 
@@ -38,6 +40,7 @@ const toMin = (hhmm: string) => {
 
 export function AddToTrip({ place, trip, places, onBack, onDone }: Props) {
   const router = useRouter();
+  const auth = useAuth();
   const byId = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
   const { plan, input } = trip;
 
@@ -64,11 +67,28 @@ export function AddToTrip({ place, trip, places, onBack, onDone }: Props) {
   }
 
   function save(result: InsertPreview, d: number, start: number) {
-    updateSelectedPlan(result.plan);
+    // Cập nhật ngay trên máy (AC-F8.3-04) rồi lưu phiên bản mới lên tài khoản ở nền.
+    commitPlan(result.plan, auth.status === "signed_in" ? auth.user.id : null).catch((e) => {
+      if (e instanceof TripConflictError) {
+        toast.error("Lịch đã được sửa ở thiết bị khác", {
+          description: "Thay đổi vừa rồi chưa được lưu lên tài khoản.",
+          action: { label: "Tải bản mới nhất", onClick: () => reloadFromServer() },
+        });
+      } else {
+        console.error(e);
+        toast.error("Đã thêm trên máy nhưng chưa lưu được lên tài khoản.");
+      }
+    });
     toast.success(`Đã thêm ${place.name} vào ngày ${d} lúc ${fmtMin(start)}`, {
       action: { label: "Xem lịch", onClick: () => router.push("/trip") },
     });
     onDone(d);
+  }
+
+  async function reloadFromServer() {
+    if (auth.status !== "signed_in") return;
+    const remote = await loadLatestTrip(auth.user.id, places);
+    if (remote) replaceTripDraft(remote);
   }
 
   /** Kiểm tra trước; không có xung đột thì lưu luôn, có thì mở màn UX-05. */

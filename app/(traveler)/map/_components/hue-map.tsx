@@ -10,10 +10,12 @@
 
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MapPinOff, Route } from "lucide-react";
 import { cn } from "cn";
+import { useAuth } from "@/lib/auth";
 import { getMapProvider } from "@/lib/map/provider";
+import { takePendingAction } from "@/lib/pending-action";
 import {
   DEFAULT_FILTERS,
   HUE_CENTER,
@@ -117,6 +119,27 @@ export function HueMap({ places, categories }: Props) {
     },
     [writeUrl],
   );
+
+  // ---------- ?place=<id>: mở thẻ địa điểm (link chia sẻ, quay lại sau khi đăng nhập – AC-F8.3-01) ----------
+  const auth = useAuth();
+  const placeParam = searchParams.get("place");
+  const [autoAddFor, setAutoAddFor] = useState<string | null>(null);
+  const handledPlace = useRef<string | null>(null);
+  useEffect(() => {
+    if (!placeParam || handledPlace.current === placeParam || auth.status === "loading") return;
+    if (!places.some((p) => p.id === placeParam)) return;
+    handledPlace.current = placeParam;
+    // Chạy đúng một lần cho mỗi ?place, sau khi biết trạng thái đăng nhập; phải lấy hành động chờ ra khỏi
+    // localStorage nên không làm trong lúc render được (StrictMode gọi render 2 lần sẽ lấy mất hành động).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedId(placeParam);
+    if (auth.status === "signed_in" && takePendingAction("add_place")?.place_id === placeParam) {
+      setAutoAddFor(placeParam);
+    }
+    // Bỏ ?place khỏi URL để tải lại trang không mở lại thẻ.
+    const sp = new URLSearchParams(window.location.search);
+    writeUrl(filtersFromSearchParams(sp), sp.get("day") ? Number(sp.get("day")) : null);
+  }, [placeParam, auth.status, places, writeUrl]);
 
   // ---------- Lịch trên bản đồ (UX-06) ----------
   const plan = draft?.selected ?? null;
@@ -266,7 +289,11 @@ export function HueMap({ places, categories }: Props) {
         match={selected ? getMatch(selected) : null}
         userLocation={userLocation}
         now={now}
-        onClose={() => setSelectedId(null)}
+        onClose={() => {
+          setSelectedId(null);
+          setAutoAddFor(null);
+        }}
+        startAdding={autoAddFor != null && autoAddFor === selectedId}
         trip={draft && plan ? { input: draft.input, plan } : null}
         places={places}
         onAdded={(dayNo) => {
