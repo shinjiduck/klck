@@ -8,7 +8,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarPlus, Clock, Info, MapPin, Navigation, Route, Ticket, Timer } from "lucide-react";
+import { CalendarPlus, Car, Clock, Info, MapPin, Navigation, Route, Ticket, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { KIND_SOFT, KindIcon, placeKind } from "@/components/layer-icon";
@@ -28,6 +28,8 @@ import {
 import type { Category, LatLng, Place, PlaceMatch } from "@/lib/types";
 import { needsLogin, useAuth } from "@/lib/auth";
 import { setPendingAction } from "@/lib/pending-action";
+import { preferenceFromDraft, useTripDraft } from "@/lib/trip-draft";
+import { useAiReason } from "@/lib/use-ai-reason";
 import { AddToTrip, type TripContext } from "./add-to-trip";
 import { OPEN_TONE } from "./place-list-sheet";
 
@@ -45,6 +47,8 @@ type Props = {
   onAdded: (dayNo: number) => void;
   /** Mở thẳng bước "Thêm vào lịch" (quay lại sau khi đăng nhập – AC-F8.3-01). */
   startAdding?: boolean;
+  /** AC-F8.2-06: điểm trước đó trong lịch của ngày đang xem / hôm nay (để tính thời gian đi). */
+  prevStop: { name: string; label: string; location: LatLng } | null;
 };
 
 export function PlaceCard({ place, onClose, ...rest }: Props) {
@@ -101,11 +105,15 @@ function PlaceCardBody({
   userLocation,
   now,
   onAdd,
-}: Pick<Props, "category" | "match" | "userLocation" | "now"> & { place: Place; onAdd: () => void }) {
+  prevStop,
+}: Pick<Props, "category" | "match" | "userLocation" | "now" | "prevStop"> & { place: Place; onAdd: () => void }) {
   const kind = placeKind(place);
+  const draft = useTripDraft();
+  const ai = useAiReason(place.id, preferenceFromDraft(draft), match != null);
   const status = getOpenStatus(place, now);
   const price = getPriceText(place);
   const travel = userLocation ? estimateTravel(userLocation, place.location) : null;
+  const fromPrev = prevStop && prevStop.name !== place.name ? estimateTravel(prevStop.location, place.location) : null;
   const categoryLabel =
     place.layer === "stay" && place.lodging_type
       ? LODGING_LABEL[place.lodging_type]
@@ -146,11 +154,16 @@ function PlaceCardBody({
         </DrawerDescription>
 
         {match && match.reasons.length > 0 && (
-          <ul className="mt-3 space-y-1 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
-            {match.reasons.slice(0, 3).map((r) => (
-              <li key={r.code}>{r.text}</li>
-            ))}
-          </ul>
+          <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+            <ul className="space-y-1">
+              {/* Câu đầu: bản Claude viết lại khi đã về, trước đó là câu mẫu theo reason code. */}
+              <li>{ai?.text ?? match.reasons[0].text}</li>
+              {match.reasons.slice(1, 3).map((r) => (
+                <li key={r.code}>{r.text}</li>
+              ))}
+            </ul>
+            {ai?.source === "ai" && <p className="mt-1 text-[11px] text-emerald-800/70">Diễn giải bởi AI từ dữ liệu địa điểm</p>}
+          </div>
         )}
 
         {/* AC-F8.2-05: dòng tóm tắt giá trị thật kèm nguồn */}
@@ -182,6 +195,13 @@ function PlaceCardBody({
                 : "Bấm “Vị trí của tôi” trên bản đồ để xem"
             }
           />
+          {fromPrev && prevStop && (
+            <Row
+              icon={Car}
+              label={prevStop.label}
+              value={`khoảng ${fromPrev.minutes} phút đi xe máy (${fromPrev.km.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} km, ước tính)`}
+            />
+          )}
           <Row icon={MapPin} label="Địa chỉ" value={[place.address, place.ward].filter(Boolean).join(", ") || UNKNOWN} />
         </dl>
 

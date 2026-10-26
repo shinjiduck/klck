@@ -36,9 +36,11 @@ const MAX_SIGHTS_PER_DAY = 5;
 const MEAL_DURATION = { meal: 60, cafe: 45 } as const;
 
 /** Trần giá một bữa/người theo mức ngân sách (giá thấp nhất của quán). */
-const MEAL_CAP: Record<BudgetLevel, number> = { saving: 60_000, moderate: 250_000, comfortable: Infinity };
+export const MEAL_CAP: Record<BudgetLevel, number> = { saving: 60_000, moderate: 250_000, comfortable: Infinity };
 /** Mức chi tiêu/người/ngày (chưa gồm lưu trú, di chuyển) để cảnh báo vượt ngân sách. */
 const DAILY_CAP: Record<BudgetLevel, number> = { saving: 400_000, moderate: 900_000, comfortable: Infinity };
+/** Trần giá phòng/đêm theo mức ngân sách (giá thấp nhất của nơi ở) – dùng cho gợi ý lưu trú F3. */
+export const STAY_CAP: Record<BudgetLevel, number> = { saving: 500_000, moderate: 1_200_000, comfortable: Infinity };
 
 const BASE_SIGHTS: Record<Pace, number> = { relaxed: 2, normal: 3, packed: 4 };
 
@@ -121,6 +123,8 @@ type Ctx = {
   evenings: Place[];
   used: Set<string>;
   issues: ConstraintIssue[];
+  /** Điểm xuất phát mỗi ngày: nơi ở đã chọn, hoặc trung tâm Huế. */
+  origin: LatLng;
 };
 
 /** a0, b0, a1, b1, … rồi phần còn lại. */
@@ -148,7 +152,7 @@ function scheduleDay(ctx: Ctx, dayNo: number, date: string, sights: Place[], for
   const items: PlannedItem[] = [];
   const usedToday = new Set<string>();
   let t = DAY_START;
-  let pos: LatLng = HUE_CENTER;
+  let pos: LatLng = ctx.origin;
 
   const push = (p: Place, kind: PlannedItemKind, start: number, dur: number, travel: number) => {
     items.push({
@@ -308,18 +312,20 @@ function generateOne(planType: PlanType, input: TripInput, places: Place[], byId
         ? interleave(ofLayer("attraction"), ofLayer("heritage"))
         : ranked;
   const capacity = Math.max(perDay * input.day_count, mustDay.length);
-  const chosen = nearestChain([...mustDay, ...ordered].slice(0, capacity), HUE_CENTER);
+  const origin = tripOrigin(input, byId);
+  const chosen = nearestChain([...mustDay, ...ordered].slice(0, capacity), origin);
 
   // Chia đều theo thứ tự tuyến để mỗi ngày đi một khu vực.
   const dayChunks: Place[][] = [];
   let k = 0;
   for (let d = 0; d < input.day_count; d++) {
     const size = Math.floor(chosen.length / input.day_count) + (d < chosen.length % input.day_count ? 1 : 0);
-    dayChunks.push(nearestChain(chosen.slice(k, k + size), HUE_CENTER));
+    dayChunks.push(nearestChain(chosen.slice(k, k + size), origin));
     k += size;
   }
 
   const ctx: Ctx = {
+    origin,
     input,
     planType,
     foods: places.filter((p) => p.layer === "food" && p.primary_category_id !== "cat-cafe"),
@@ -392,6 +398,12 @@ export function evaluateDays(
     issues,
     feasible: isFeasible(issues),
   };
+}
+
+/** Điểm xuất phát mỗi ngày: nơi ở đã chọn (F3), nếu chưa chọn thì trung tâm Huế. */
+export function tripOrigin(input: TripInput, byId: Map<string, Place>): LatLng {
+  const stay = input.stay_place_id ? byId.get(input.stay_place_id) : undefined;
+  return stay?.location ?? HUE_CENTER;
 }
 
 /** AC-F1-02: tối đa 3 phương án phân biệt rõ. Chỉ dùng địa điểm đã xuất bản. */

@@ -20,6 +20,7 @@ import { fmtMin } from "@/lib/places";
 import { useAuth } from "@/lib/auth";
 import { replaceTripDraft } from "@/lib/trip-draft";
 import { TripConflictError, commitPlan, loadLatestTrip } from "@/lib/trip-sync";
+import { tripOrigin } from "@/lib/reco/generate-plans";
 import { defaultDuration, previewInsert, suggestSlots, type InsertPreview, type Slot } from "@/lib/trip-edit";
 import type { GeneratedPlan, Place, TripInput } from "@/lib/types";
 
@@ -45,8 +46,8 @@ export function AddToTrip({ place, trip, places, onBack, onDone }: Props) {
   const { plan, input } = trip;
 
   const slotsByDay = useMemo(
-    () => new Map(plan.days.map((d) => [d.day_no, suggestSlots(d, place, byId)])),
-    [plan, place, byId],
+    () => new Map(plan.days.map((d) => [d.day_no, suggestSlots(d, place, byId, 3, tripOrigin(input, byId))])),
+    [plan, place, byId, input],
   );
   const firstDayWithSlot = plan.days.find((d) => (slotsByDay.get(d.day_no) ?? []).length > 0)?.day_no ?? 1;
 

@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, CheckCircle2, CloudOff, Map as MapIcon } from "lucide-react";
+import { AlertTriangle, BedDouble, CalendarDays, CheckCircle2, CloudOff, Map as MapIcon, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { AccountButton } from "@/components/account-button";
@@ -55,6 +55,7 @@ export function MyTrip({ places }: { places: Place[] }) {
   const day = plan.days.find((d) => d.day_no === dayNo) ?? plan.days[0];
   const errors = plan.issues.filter((i) => i.severity === "error");
   const guest = needsLogin(auth);
+  const stay = draft?.input.stay_place_id ? placesById.get(draft.input.stay_place_id) : undefined;
   const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
 
   async function reloadFromServer() {
@@ -143,6 +144,24 @@ export function MyTrip({ places }: { places: Place[] }) {
           <MapIcon data-icon="inline-start" />
           Xem tuyến ngày {day.day_no} trên bản đồ
         </Link>
+
+        {/* UX-07: gợi ý ăn, ở theo tuyến */}
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            href={`/trip/suggest?type=food&day=${day.day_no}`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <UtensilsCrossed data-icon="inline-start" />
+            Gợi ý ăn uống
+          </Link>
+          <Link href="/trip/suggest?type=stay" className={buttonVariants({ variant: "outline" })}>
+            <BedDouble data-icon="inline-start" />
+            {stay ? "Đổi nơi ở" : "Gợi ý nơi ở"}
+          </Link>
+        </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Mỗi ngày xuất phát từ <b>{stay ? stay.name : "trung tâm Huế (chưa chọn nơi ở)"}</b>.
+        </p>
 
         {errors.length > 0 && (
           <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">

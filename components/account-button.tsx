@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogIn, LogOut, UserRound } from "lucide-react";
+import { LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
@@ -34,6 +34,14 @@ export function AccountButton({ className }: { className?: string }) {
       <span className="max-w-[9rem] truncate" title={auth.user.email ?? undefined}>
         {auth.user.email}
       </span>
+      <Link
+        href="/privacy"
+        title="Quyền riêng tư"
+        aria-label="Quyền riêng tư"
+        className="flex items-center rounded-md px-1.5 py-1 text-foreground hover:bg-muted"
+      >
+        <ShieldCheck className="size-3.5" aria-hidden />
+      </Link>
       <button
         type="button"
         onClick={async () => {

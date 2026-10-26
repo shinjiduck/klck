@@ -291,6 +291,23 @@ export function getPriceText(place: Place): string {
   return `${prefix}${value}${unit}${status}`;
 }
 
+/** AC-F3-03: nhãn trạng thái giá trên thẻ gợi ý ăn, ở. */
+export const PRICE_STATUS_LABEL: Record<Place["price_status"], string> = {
+  estimated: "Giá tham khảo",
+  confirmed: "Đối tác xác nhận",
+  unknown: "Không xác định",
+};
+
+/** Giá trị số của giá, không kèm nhãn trạng thái. Ví dụ "35.000đ–50.000đ/người", "Không xác định". */
+export function getPriceValue(place: Place): string {
+  const { price_min_vnd: min, price_max_vnd: max } = place;
+  if (min == null && max == null) return UNKNOWN;
+  const unit = place.layer === "food" ? "/người" : place.layer === "stay" ? "/đêm" : "";
+  if ((min ?? 0) === 0 && (max ?? 0) === 0) return "Miễn phí";
+  if (min != null && max != null && min !== max) return `${formatVnd(min)}–${formatVnd(max)}${unit}`;
+  return `${formatVnd((min ?? max) as number)}${unit}`;
+}
+
 // ---------- Nguồn, ngày cập nhật (BR-SOURCE-01) ----------
 
 /** "2026-10-15T09:00:00+07:00" → "10/2026" */

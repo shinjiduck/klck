@@ -10,7 +10,7 @@ import { PLAN_TITLE } from "@/lib/labels";
 import { addDays, fmtMin } from "@/lib/places";
 import { evaluateDays } from "@/lib/reco/generate-plans";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { readTripDraft, setServerInfo, updateSelectedPlan, type TripDraft } from "@/lib/trip-draft";
+import { readTripDraft, replaceTripDraft, setServerInfo, updateSelectedPlan, type TripDraft } from "@/lib/trip-draft";
 import type {
   BudgetLevel,
   GeneratedPlan,
@@ -49,6 +49,7 @@ export async function saveDraftToServer(draft: TripDraft, userId: string) {
       party_size: input.party_size,
       budget_level: input.budget_level,
       pace: input.pace,
+      stay_place_id: input.stay_place_id ?? null,
     },
     p_plan_type: plan.plan_type,
     p_rule_version: plan.rule_version,
@@ -127,23 +128,28 @@ type TripRow = {
   party_size: number;
   budget_level: BudgetLevel;
   pace: Pace;
+  stay_place_id: string | null;
   trip_versions: VersionRow[];
 };
 
 /** Chuyến đi cập nhật gần nhất của người dùng, dạng bản nháp; null nếu chưa có. */
 export async function loadLatestTrip(userId: string, places: Place[]): Promise<TripDraft | null> {
   const supabase = getSupabaseBrowserClient();
-  const { data: trip, error } = await supabase
-    .from("trips")
-    .select(
-      "id, start_date, day_count, travel_with, party_size, budget_level, pace, " +
-        "trip_versions!inner(version_no, plan_type, rule_version, reasons, " +
-        "itinerary_items(place_id, kind, day_no, start_time, duration_min, travel_min, est_cost_vnd))",
-    )
-    .eq("trip_versions.is_current", true)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<TripRow>();
+  const query = (withStay: boolean) =>
+    supabase
+      .from("trips")
+      .select(
+        `id, start_date, day_count, travel_with, party_size, budget_level, pace, ${withStay ? "stay_place_id, " : ""}` +
+          "trip_versions!inner(version_no, plan_type, rule_version, reasons, " +
+          "itinerary_items(place_id, kind, day_no, start_time, duration_min, travel_min, est_cost_vnd))",
+      )
+      .eq("trip_versions.is_current", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<TripRow>();
+  let { data: trip, error } = await query(true);
+  // Chưa chạy migration 20261024000001_trip_stay.sql → đọc lại không có cột nơi ở.
+  if (error && error.message.includes("stay_place_id")) ({ data: trip, error } = await query(false));
   if (error) throw new Error(error.message);
   if (!trip || !trip.trip_versions[0]) return null;
 
@@ -163,6 +169,7 @@ export async function loadLatestTrip(userId: string, places: Place[]): Promise<T
     pace: trip.pace,
     must_have_place_ids: pref?.must_haves?.place_ids ?? [],
     dietary: pref?.dietary ?? [],
+    stay_place_id: trip.stay_place_id ?? null,
   };
 
   const version = trip.trip_versions[0];
@@ -210,6 +217,15 @@ export async function loadLatestTrip(userId: string, places: Place[]): Promise<T
  */
 export async function commitPlan(plan: GeneratedPlan, userId: string | null) {
   updateSelectedPlan(plan);
+  const draft = readTripDraft();
+  if (userId && draft) await saveDraftToServer(draft, userId);
+}
+
+/** Ghi đồng thời đầu vào + lịch (ví dụ đổi nơi ở ở UX-07), rồi lưu phiên bản mới nếu đã đăng nhập. */
+export async function commitDraft(input: TripInput, plan: GeneratedPlan, userId: string | null) {
+  const prev = readTripDraft();
+  if (!prev) return;
+  replaceTripDraft({ ...prev, input, selected: plan, updated_at: new Date().toISOString() });
   const draft = readTripDraft();
   if (userId && draft) await saveDraftToServer(draft, userId);
 }

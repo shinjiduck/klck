@@ -27,6 +27,8 @@ type Props = {
   canReset: boolean;
   onReset: () => void;
   onResetView?: () => void;
+  /** Máy tính: rê chuột vào dòng thì ghim tương ứng nổi lên (Bố cục Hue Map). */
+  onHover?: (id: string | null) => void;
 };
 
 export const OPEN_TONE: Record<OpenState, string> = {
@@ -47,6 +49,7 @@ export function PlaceListSheet({
   canReset,
   onReset,
   onResetView,
+  onHover,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const dragStartY = useRef<number | null>(null);
@@ -61,6 +64,8 @@ export function PlaceListSheet({
       className={cn(
         "absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-2xl border-t bg-background shadow-[0_-4px_16px_rgb(0_0_0/0.08)] transition-[height] duration-300 ease-out",
         expanded ? "h-[65%]" : "h-44",
+        // AC-F8.1-04: máy tính → cột bên trái cao hết màn hình
+        "lg:top-0 lg:right-auto lg:h-full! lg:w-[380px] lg:rounded-none lg:border-t-0 lg:border-r lg:shadow-none",
       )}
     >
       <button
@@ -129,6 +134,8 @@ export function PlaceListSheet({
                   <button
                     type="button"
                     onClick={() => onSelect(p.id)}
+                    onMouseEnter={() => onHover?.(p.id)}
+                    onMouseLeave={() => onHover?.(null)}
                     className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted"
                   >
                     <span className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg", KIND_SOFT[kind])}>

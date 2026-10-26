@@ -27,6 +27,8 @@ import {
   inBounds,
   isDefaultFilters,
   matchesFilters,
+  nowInHue,
+  todayInHue,
   type Bounds,
   type MapFilters,
 } from "@/lib/places";
@@ -59,6 +61,7 @@ export function HueMap({ places, categories }: Props) {
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [mapError, setMapError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [resetViewKey, setResetViewKey] = useState(0);
@@ -145,6 +148,25 @@ export function HueMap({ places, categories }: Props) {
   const plan = draft?.selected ?? null;
   const dayParam = Number(searchParams.get("day"));
   const viewDay = plan?.days.find((d) => d.day_no === dayParam) ?? null;
+
+  // AC-F8.2-06: điểm trước đó trong lịch – ngày đang xem tuyến, hoặc hôm nay nếu hôm nay có trong lịch.
+  const prevStop = useMemo(() => {
+    const today = todayInHue(now);
+    const day = viewDay ?? plan?.days.find((d) => d.date === today) ?? null;
+    if (!day || day.items.length === 0) return null;
+    const isToday = day.date === today;
+    const mins = nowInHue(now).minutes;
+    const item = isToday
+      ? ([...day.items].filter((i) => i.start_min <= mins).pop() ?? day.items[0])
+      : day.items[day.items.length - 1];
+    const p = places.find((x) => x.id === item.place_id);
+    if (!p) return null;
+    return {
+      name: p.name,
+      label: isToday ? `Từ ${p.name} (điểm vừa qua trong lịch hôm nay)` : `Từ ${p.name} (điểm cuối ngày ${day.day_no})`,
+      location: p.location,
+    };
+  }, [viewDay, plan, places, now]);
   const setViewDay = (day: number | null) =>
     writeUrl(filtersFromSearchParams(new URLSearchParams(window.location.search)), day);
 
@@ -235,7 +257,7 @@ export function HueMap({ places, categories }: Props) {
           homeBounds={homeBounds}
           onViewChange={setLastView}
           places={results}
-          selectedId={selectedId}
+          selectedId={selectedId ?? hoverId}
           userLocation={userLocation}
           resetViewKey={resetViewKey}
           onViewportChange={setBounds}
@@ -272,6 +294,7 @@ export function HueMap({ places, categories }: Props) {
         canReset={!isDefaultFilters({ ...filters, q: query })}
         onReset={resetFilters}
         onResetView={mapAvailable ? () => setResetViewKey((k) => k + 1) : undefined}
+        onHover={setHoverId}
       />
 
       <FilterSheet
@@ -295,6 +318,7 @@ export function HueMap({ places, categories }: Props) {
         }}
         startAdding={autoAddFor != null && autoAddFor === selectedId}
         trip={draft && plan ? { input: draft.input, plan } : null}
+        prevStop={prevStop}
         places={places}
         onAdded={(dayNo) => {
           setSelectedId(null);
@@ -324,7 +348,7 @@ function DayPicker({
     <div
       role="group"
       aria-label="Xem lịch trên bản đồ"
-      className="absolute bottom-[13rem] left-3 z-10 flex items-center gap-0.5 rounded-full border bg-background p-0.5 shadow-md"
+      className="absolute bottom-[13rem] left-3 z-10 flex items-center gap-0.5 rounded-full border bg-background p-0.5 shadow-md lg:bottom-10 lg:left-[396px]"
     >
       <span className="flex items-center gap-1 pr-1 pl-2 text-xs text-muted-foreground">
         <Route className="size-3.5" aria-hidden />

@@ -39,7 +39,7 @@ export function MapTopBar({ filters, query, onQueryChange, onFiltersChange, onOp
   const showLodgingRow = filters.layers.includes("stay") && !allOn;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-2 bg-gradient-to-b from-background/90 via-background/60 to-transparent px-3 pt-3 pb-4">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-2 lg:left-[380px] bg-gradient-to-b from-background/90 via-background/60 to-transparent px-3 pt-3 pb-4">
       <div className="pointer-events-auto flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />

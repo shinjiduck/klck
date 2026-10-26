@@ -155,6 +155,8 @@ export type TripInput = {
   must_have_place_ids: string[];
   /** Chỉ có khi người dùng tự khai (BR-PREF-02). */
   dietary: "vegetarian"[];
+  /** Nơi ở đã chọn ở UX-07 (F3); mỗi ngày xuất phát từ đây. Chưa chọn → trung tâm Huế. */
+  stay_place_id?: string | null;
 };
 
 export type PlannedItemKind = "visit" | "meal" | "cafe" | "evening";

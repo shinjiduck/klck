@@ -4,8 +4,8 @@
 // Hàm thuần; Constraint Engine là nơi duy nhất quyết định có xung đột hay không (BR-FEAS-01).
 
 import { HUE_CENTER, estimateTravel, fmtMin, getOpenRanges, weekdayOf } from "@/lib/places";
-import { evaluateDays } from "@/lib/reco/generate-plans";
-import type { ConstraintIssue, GeneratedPlan, Place, PlanDay, PlannedItem, PlannedItemKind, TripInput } from "@/lib/types";
+import { evaluateDays, tripOrigin } from "@/lib/reco/generate-plans";
+import type { ConstraintIssue, GeneratedPlan, LatLng, Place, PlanDay, PlannedItem, PlannedItemKind, TripInput } from "@/lib/types";
 
 /** Giờ muộn nhất một mục được kết thúc khi gợi ý khung giờ. */
 const LATEST_END = 22 * 60;
@@ -25,11 +25,11 @@ function kindFor(place: Place, start: number): PlannedItemKind {
   return "visit";
 }
 
-/** Tính lại thời gian di chuyển giữa các mục theo thứ tự (mục đầu đi từ trung tâm Huế). */
-function relink(items: PlannedItem[], byId: Map<string, Place>): PlannedItem[] {
+/** Tính lại thời gian di chuyển giữa các mục theo thứ tự (mục đầu đi từ nơi ở / trung tâm Huế). */
+function relink(items: PlannedItem[], byId: Map<string, Place>, origin: LatLng = HUE_CENTER): PlannedItem[] {
   const sorted = [...items].sort((a, b) => a.start_min - b.start_min);
   return sorted.map((it, i) => {
-    const from = i === 0 ? HUE_CENTER : byId.get(sorted[i - 1].place_id)?.location ?? HUE_CENTER;
+    const from = i === 0 ? origin : byId.get(sorted[i - 1].place_id)?.location ?? origin;
     const to = byId.get(it.place_id)?.location ?? HUE_CENTER;
     return { ...it, travel_min: estimateTravel(from, to).minutes };
   });
@@ -41,7 +41,13 @@ export type Slot = { start_min: number; end_min: number; label: string };
  * Khung giờ trống trong ngày phù hợp giờ mở cửa và đủ thời gian đi tới / đi tiếp (AC-F8.3-05).
  * Trả tối đa `limit` khung, sớm nhất trước.
  */
-export function suggestSlots(day: PlanDay, place: Place, byId: Map<string, Place>, limit = 3): Slot[] {
+export function suggestSlots(
+  day: PlanDay,
+  place: Place,
+  byId: Map<string, Place>,
+  limit = 3,
+  origin: LatLng = HUE_CENTER,
+): Slot[] {
   const dur = defaultDuration(place);
   const ranges = getOpenRanges(place, weekdayOf(day.date)) ?? [[EARLIEST_START, LATEST_END]];
   const items = [...day.items].sort((a, b) => a.start_min - b.start_min);
@@ -54,7 +60,7 @@ export function suggestSlots(day: PlanDay, place: Place, byId: Map<string, Place
     const nextPlace = next ? byId.get(next.place_id) : undefined;
     if (prev?.place_id === place.id || next?.place_id === place.id) continue;
 
-    const from = prevPlace?.location ?? HUE_CENTER;
+    const from = prevPlace?.location ?? origin;
     const earliest = prev ? prev.start_min + prev.duration_min + estimateTravel(from, place.location).minutes : EARLIEST_START;
     const latestEnd = next && nextPlace ? next.start_min - estimateTravel(place.location, nextPlace.location).minutes : LATEST_END;
 
@@ -101,7 +107,7 @@ export function previewInsert(
     travel_min: 0,
     est_cost_vnd: estimateCost(place),
   };
-  const items = relink([...day.items, newItem], byId);
+  const items = relink([...day.items, newItem], byId, tripOrigin(input, byId));
   const days = plan.days.map((d) => (d.day_no === dayNo ? { ...d, items } : d));
   const next = { ...plan, ...evaluateDays(days, input, byId) };
 
@@ -127,7 +133,7 @@ export function removeItem(
   index: number,
 ): GeneratedPlan {
   const days = plan.days.map((d) =>
-    d.day_no === dayNo ? { ...d, items: relink(d.items.filter((_, i) => i !== index), byId) } : d,
+    d.day_no === dayNo ? { ...d, items: relink(d.items.filter((_, i) => i !== index), byId, tripOrigin(input, byId)) } : d,
   );
   return { ...plan, ...evaluateDays(days, input, byId) };
 }
@@ -138,4 +144,20 @@ function estimateCost(p: Place): number | null {
   const lo = p.price_min_vnd ?? p.price_max_vnd ?? 0;
   const hi = p.price_max_vnd ?? lo;
   return Math.round((lo + hi) / 2);
+}
+
+/**
+ * Đổi nơi ở (F3, UX-07): tính lại thời gian đi từ nơi ở tới điểm đầu mỗi ngày và kiểm tra lại lịch.
+ * Trả về đầu vào mới (có stay_place_id) và lịch đã tính lại.
+ */
+export function applyStay(
+  plan: GeneratedPlan,
+  input: TripInput,
+  byId: Map<string, Place>,
+  stayPlaceId: string | null,
+): { input: TripInput; plan: GeneratedPlan } {
+  const nextInput = { ...input, stay_place_id: stayPlaceId };
+  const origin = tripOrigin(nextInput, byId);
+  const days = plan.days.map((d) => ({ ...d, items: relink(d.items, byId, origin) }));
+  return { input: nextInput, plan: { ...plan, ...evaluateDays(days, nextInput, byId) } };
 }

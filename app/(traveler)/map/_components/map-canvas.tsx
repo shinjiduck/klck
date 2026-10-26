@@ -22,8 +22,12 @@ import type { LatLng, Place } from "@/lib/types";
 /** Thời gian chờ sau khi ngừng kéo/zoom (AC-F8.1-02 yêu cầu 300–500 ms). */
 export const VIEWPORT_DEBOUNCE_MS = 400;
 
-/** Chừa chỗ cho thanh tìm kiếm/chip (trên), ngăn kéo thu gọn (dưới) và nút zoom (phải). */
-const VIEW_PADDING = { top: 150, bottom: 200, left: 30, right: 60 };
+/** Chừa chỗ cho thanh tìm kiếm/chip (trên), ngăn kéo thu gọn (dưới) và nút zoom (phải).
+ *  Máy tính: danh sách là cột trái 380px nên chừa bên trái thay vì bên dưới. */
+const viewPadding = () =>
+  typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches
+    ? { top: 120, bottom: 40, left: 420, right: 70 }
+    : { top: 150, bottom: 200, left: 30, right: 60 };
 
 type PointProps = { placeId: string };
 
@@ -96,7 +100,7 @@ export default function MapCanvas({
   useEffect(() => {
     if (resetKeyRef.current === resetViewKey) return;
     resetKeyRef.current = resetViewKey;
-    moveCamera((m) => m.fitBounds(homeBox, { padding: VIEW_PADDING }));
+    moveCamera((m) => m.fitBounds(homeBox, { padding: viewPadding() }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetViewKey]);
 
@@ -112,7 +116,7 @@ export default function MapCanvas({
           [Math.min(...lngs), Math.min(...lats)],
           [Math.max(...lngs), Math.max(...lats)],
         ],
-        { padding: VIEW_PADDING, maxZoom: 15, duration: 800 },
+        { padding: viewPadding(), maxZoom: 15, duration: 800 },
       ),
     );
     // Chỉ canh lại khi đổi ngày/đổi điểm, không canh lại khi tuyến đường thật vừa tải về.
@@ -135,10 +139,19 @@ export default function MapCanvas({
   const clusters = useMemo(() => index.getClusters([-180, -85, 180, 85], Math.round(zoom)), [index, zoom]);
   const byId = useMemo(() => new globalThis.Map(places.map((p) => [p.id, p])), [places]);
 
+  /**
+   * Vùng nhìn = khung bản đồ người dùng thật sự thấy. Không dùng getBounds(): sau fitBounds có padding,
+   * Mapbox GL v3 giữ padding và getBounds() chỉ trả vùng bên trong padding → điểm ở mép bị loại khỏi
+   * danh sách dù vẫn thấy ghim. Máy tính: bỏ phần bị cột danh sách 380px che (AC-F8.1-02: ghim = danh sách).
+   */
   function emitBounds() {
-    const b = mapRef.current?.getBounds();
-    if (!b) return;
-    onViewportChange({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+    const m = mapRef.current?.getMap();
+    if (!m) return;
+    const el = m.getContainer();
+    const left = window.matchMedia("(min-width: 1024px)").matches ? Math.min(380, el.clientWidth) : 0;
+    const sw = m.unproject([left, el.clientHeight]);
+    const ne = m.unproject([el.clientWidth, 0]);
+    onViewportChange({ west: sw.lng, south: sw.lat, east: ne.lng, north: ne.lat });
   }
 
   function scheduleEmit() {
@@ -182,14 +195,14 @@ export default function MapCanvas({
 
   return (
     // Đẩy logo + attribution Mapbox lên trên ngăn kéo thu gọn (h-44) để luôn nhìn thấy (điều khoản Mapbox).
-    <div className="absolute inset-0 [&_.mapboxgl-ctrl-bottom-left]:bottom-44! [&_.mapboxgl-ctrl-bottom-right]:bottom-44!">
+    <div className="absolute inset-0 [&_.mapboxgl-ctrl-bottom-left]:bottom-44! [&_.mapboxgl-ctrl-bottom-right]:bottom-44! lg:[&_.mapboxgl-ctrl-bottom-left]:bottom-0! lg:[&_.mapboxgl-ctrl-bottom-left]:left-[380px]! lg:[&_.mapboxgl-ctrl-bottom-right]:bottom-0!">
       <Map
         ref={mapRef}
         mapboxAccessToken={token}
         initialViewState={
           initialView
             ? { longitude: initialView.lng, latitude: initialView.lat, zoom: initialView.zoom }
-            : { bounds: homeBox, fitBoundsOptions: { padding: VIEW_PADDING } }
+            : { bounds: homeBox, fitBoundsOptions: { padding: viewPadding() } }
         }
         mapStyle="mapbox://styles/mapbox/streets-v12"
         language="vi"
