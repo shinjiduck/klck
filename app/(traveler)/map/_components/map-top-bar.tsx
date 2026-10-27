@@ -39,7 +39,7 @@ export function MapTopBar({ filters, query, onQueryChange, onFiltersChange, onOp
   const showLodgingRow = filters.layers.includes("stay") && !allOn;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-2 lg:left-[380px] bg-gradient-to-b from-background/90 via-background/60 to-transparent px-3 pt-3 pb-4">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 space-y-2 lg:left-[380px] bg-gradient-to-b from-background/95 via-background/70 to-transparent px-3 pt-3 pb-4">
       <div className="pointer-events-auto flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -49,7 +49,7 @@ export function MapTopBar({ filters, query, onQueryChange, onFiltersChange, onOp
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Tìm địa điểm ở Huế"
             aria-label="Tìm địa điểm"
-            className="h-10 rounded-full bg-background pr-9 pl-9 shadow-sm [&::-webkit-search-cancel-button]:hidden"
+            className="h-11 rounded-full border-transparent bg-background/90 pr-9 pl-9 shadow-md backdrop-blur [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
             <button
@@ -65,7 +65,7 @@ export function MapTopBar({ filters, query, onQueryChange, onFiltersChange, onOp
         <button
           type="button"
           onClick={onOpenFilters}
-          className="relative flex h-10 shrink-0 items-center gap-1.5 rounded-full border bg-background px-3 text-sm font-medium shadow-sm hover:bg-muted"
+          className="relative flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-background/90 px-3.5 text-sm font-medium shadow-md backdrop-blur hover:bg-muted"
         >
           <SlidersHorizontal className="size-4" aria-hidden />
           Bộ lọc

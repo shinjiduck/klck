@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MapPinOff, Route } from "lucide-react";
 import { cn } from "cn";
+import { placeKind } from "@/components/layer-icon";
 import { useAuth } from "@/lib/auth";
 import { getMapProvider } from "@/lib/map/provider";
 import { takePendingAction } from "@/lib/pending-action";
@@ -179,7 +180,9 @@ export function HueMap({ places, categories }: Props) {
       const problem = plan.issues.some(
         (x) => x.severity === "error" && x.place_id === p.id && (x.day_no == null || x.day_no === viewDay.day_no),
       );
-      return [{ placeId: p.id, name: p.name, lat: p.location.lat, lng: p.location.lng, order: i + 1, problem }];
+      return [
+        { placeId: p.id, name: p.name, lat: p.location.lat, lng: p.location.lng, order: i + 1, problem, kind: placeKind(p) },
+      ];
     });
   }, [viewDay, plan, places]);
   const stopsKey = stops.map((s) => `${s.lng},${s.lat}`).join(";");

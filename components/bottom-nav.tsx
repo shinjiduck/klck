@@ -18,7 +18,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Điều hướng chính" className="h-14 shrink-0 border-t bg-background">
+    <nav aria-label="Điều hướng chính" className="h-16 shrink-0 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
       <ul className="grid h-full grid-cols-3">
         {ITEMS.map(({ href, label, icon: Icon, match }) => {
           const active = match.some((m) => pathname === m || pathname.startsWith(`${m}/`));
@@ -28,11 +28,13 @@ export function BottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-full flex-col items-center justify-center gap-0.5 text-xs font-medium",
+                  "flex h-full flex-col items-center justify-center gap-1 text-[11px] font-medium",
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className={cn("size-5", active && "stroke-[2.5]")} aria-hidden />
+                <span className={cn("flex h-7 w-14 items-center justify-center rounded-full transition-colors", active && "bg-primary/12")}>
+                  <Icon className={cn("size-5", active && "stroke-[2.3]")} aria-hidden />
+                </span>
                 {label}
               </Link>
             </li>

@@ -8,12 +8,16 @@ import { HueMap } from "./_components/hue-map";
 
 export const metadata: Metadata = { title: "Hue Map · HueTrip" };
 
-export default async function MapPage() {
+async function MapData() {
   const [places, categories] = await Promise.all([getPublishedPlaces(), getCategories()]);
+  return <HueMap places={places} categories={categories} />;
+}
+
+export default function MapPage() {
   return (
-    // HueMap đọc bộ lọc từ URL (useSearchParams) nên cần Suspense.
+    // Tải dữ liệu + HueMap đọc bộ lọc từ URL (useSearchParams) đều nằm trong Suspense.
     <Suspense fallback={<div className="absolute inset-0 animate-pulse bg-muted" />}>
-      <HueMap places={places} categories={categories} />
+      <MapData />
     </Suspense>
   );
 }

@@ -5,8 +5,8 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { ChevronRight, Route } from "lucide-react";
-import { cn } from "cn";
-import { KIND_SOFT, KindIcon, placeKind } from "@/components/layer-icon";
+import { HeroBanner } from "@/components/hero-banner";
+import { PlaceImage } from "@/components/place-image";
 import { PACE_LABEL, TRAVEL_WITH_LABEL } from "@/lib/labels";
 import { COLLECTIONS, SAMPLE_TRIPS } from "@/lib/samples";
 import type { Place } from "@/lib/types";
@@ -20,10 +20,9 @@ export function ExploreView({ places }: { places: Place[] }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-6 px-4 pt-5 pb-8">
-        <header>
-          <h1 className="text-xl font-semibold">Khám phá Huế</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Lịch mẫu có sẵn và địa điểm theo chủ đề. Không cần tài khoản.</p>
-        </header>
+        <HeroBanner eyebrow="Khám phá" title="Huế theo cách của bạn">
+          Lịch mẫu dựng sẵn và địa điểm theo chủ đề. Xem thoải mái, không cần tài khoản.
+        </HeroBanner>
 
         <section className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-base font-semibold">
@@ -35,10 +34,10 @@ export function ExploreView({ places }: { places: Place[] }) {
               <li key={s.id}>
                 <Link
                   href={`/explore/${s.id}`}
-                  className="flex items-center gap-3 rounded-xl border p-3 hover:bg-muted"
+                  className="flex items-center gap-3 rounded-2xl border bg-card p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{s.title}</p>
+                    <p className="font-[family-name:var(--font-display)] text-base font-semibold">{s.title}</p>
                     <p className="text-xs text-muted-foreground">{s.description}</p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {s.input.day_count} ngày · {TRAVEL_WITH_LABEL[s.input.travel_with]} · Nhịp{" "}
@@ -60,14 +59,11 @@ export function ExploreView({ places }: { places: Place[] }) {
             </div>
             <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
               {c.places.map((p) => {
-                const kind = placeKind(p);
                 return (
-                  <li key={p.id} className="w-40 shrink-0">
-                    <Link href={`/map?place=${p.id}`} className="block rounded-xl border p-2.5 hover:bg-muted">
-                      <span className={cn("flex h-16 items-center justify-center rounded-lg", KIND_SOFT[kind])}>
-                        <KindIcon kind={kind} className="size-6" />
-                      </span>
-                      <span className="mt-2 line-clamp-2 block text-xs font-medium">{p.name}</span>
+                  <li key={p.id} className="w-44 shrink-0">
+                    <Link href={`/map?place=${p.id}`} className="block overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:shadow-md">
+                      <PlaceImage place={p} className="h-28 w-full" />
+                      <span className="line-clamp-2 block px-2.5 py-2 text-xs font-medium">{p.name}</span>
                     </Link>
                   </li>
                 );

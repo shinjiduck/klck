@@ -2,17 +2,27 @@
 // Máy tính (≥ 1024px): bỏ khung 390px; RouteFrame quyết định trang nào dùng toàn màn hình.
 // Có Supabase: gắn TripSync để đồng bộ chuyến đi khi đăng nhập/đăng xuất.
 
+import { Suspense } from "react";
 import { BottomNav } from "@/components/bottom-nav";
 import { RouteFrame } from "@/components/route-frame";
 import { TripSync } from "@/components/trip-sync";
 import { getPublishedPlaces } from "@/lib/data/places";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-export default async function TravelerLayout({ children }: { children: React.ReactNode }) {
-  const places = isSupabaseConfigured ? await getPublishedPlaces() : [];
+/** Tải địa điểm trong Suspense để khung trang vẫn prerender được (không chặn điều hướng). */
+async function TripSyncLoader() {
+  const places = await getPublishedPlaces();
+  return <TripSync places={places} />;
+}
+
+export default function TravelerLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex h-dvh w-full max-w-[390px] flex-col overflow-hidden bg-background shadow-xl lg:max-w-none">
-      {isSupabaseConfigured && <TripSync places={places} />}
+      {isSupabaseConfigured && (
+        <Suspense fallback={null}>
+          <TripSyncLoader />
+        </Suspense>
+      )}
       <main className="relative min-h-0 flex-1">
         <RouteFrame>{children}</RouteFrame>
       </main>

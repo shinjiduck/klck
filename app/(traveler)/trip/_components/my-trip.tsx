@@ -7,7 +7,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, BedDouble, CalendarDays, CheckCircle2, CloudOff, Map as MapIcon, UtensilsCrossed } from "lucide-react";
+import {
+  AlertTriangle,
+  BedDouble,
+  CalendarDays,
+  CheckCircle2,
+  CloudOff,
+  Map as MapIcon,
+  Navigation,
+  UtensilsCrossed,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { AccountButton } from "@/components/account-button";
@@ -16,11 +25,14 @@ import { PlanTimeline, dayLabel } from "@/components/plan-timeline";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { needsLogin, useAuth } from "@/lib/auth";
-import { formatVnd } from "@/lib/places";
+import { dayDirectionsUrls, formatVnd } from "@/lib/places";
 import { replaceTripDraft, useTripDraft } from "@/lib/trip-draft";
 import { removeItem } from "@/lib/trip-edit";
 import { TripConflictError, commitPlan, loadLatestTrip } from "@/lib/trip-sync";
 import type { Place } from "@/lib/types";
+import { HeroBanner } from "@/components/hero-banner";
+
+const HERO_BTN = "bg-white/15 text-primary-foreground ring-1 ring-white/25 hover:bg-white/25";
 
 export function MyTrip({ places }: { places: Place[] }) {
   const auth = useAuth();
@@ -36,16 +48,16 @@ export function MyTrip({ places }: { places: Place[] }) {
     return (
       <div className="relative flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
         <AccountButton className="absolute top-4 right-4" />
-        <div className="flex size-14 items-center justify-center rounded-full bg-muted">
-          <CalendarDays className="size-7 text-muted-foreground" aria-hidden />
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/15">
+          <CalendarDays className="size-8 text-primary" aria-hidden />
         </div>
-        <h1 className="text-lg font-semibold">Chưa có lịch trình</h1>
+        <h1 className="text-2xl font-semibold">Chưa có lịch trình</h1>
         <p className="text-sm text-muted-foreground">
           {draft
             ? "Bạn đã khai sở thích nhưng chưa chọn phương án."
             : "Khai sở thích để HueTrip gợi ý 3 phương án lịch trình cho bạn."}
         </p>
-        <Link href={draft ? "/plans" : "/onboarding"} className={buttonVariants({ size: "lg" })}>
+        <Link href={draft ? "/plans" : "/onboarding"} className={cn(buttonVariants({ size: "lg" }), "h-12 rounded-full px-6")}>
           {draft ? "Xem 3 phương án" : "Lên lịch trình"}
         </Link>
       </div>
@@ -57,6 +69,10 @@ export function MyTrip({ places }: { places: Place[] }) {
   const guest = needsLogin(auth);
   const stay = draft?.input.stay_place_id ? placesById.get(draft.input.stay_place_id) : undefined;
   const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  const dayLinks = dayDirectionsUrls(
+    stay?.location ?? null,
+    day.items.flatMap((it) => placesById.get(it.place_id)?.location ?? []),
+  );
 
   async function reloadFromServer() {
     if (auth.status !== "signed_in") return;
@@ -85,11 +101,10 @@ export function MyTrip({ places }: { places: Place[] }) {
     <div className="h-full overflow-y-auto">
       <div className="space-y-4 px-4 pt-5 pb-6">
         <AccountButton className="justify-end" />
-        <header className="space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <h1 className="text-xl font-semibold">{plan.title}</h1>
+        <HeroBanner eyebrow="Lịch của tôi" title={plan.title}>
+          <div className="space-y-3">
             {plan.feasible ? (
-              <Badge className="bg-emerald-600 text-white">
+              <Badge className="bg-emerald-500 text-white">
                 <CheckCircle2 />
                 Khả thi
               </Badge>
@@ -99,20 +114,20 @@ export function MyTrip({ places }: { places: Place[] }) {
                 Còn {errors.length} vấn đề
               </Badge>
             )}
+            <p>
+              {plan.summary} · ~{formatVnd(plan.est_cost_per_person_vnd)}/người (ước tính)
+              {draft?.server && ` · Phiên bản ${draft.server.version_no}`}
+            </p>
+            <div className="flex gap-2">
+              <Link href="/plans" className={cn(buttonVariants({ size: "sm" }), HERO_BTN)}>
+                Đổi phương án
+              </Link>
+              <Link href="/onboarding" className={cn(buttonVariants({ size: "sm" }), HERO_BTN)}>
+                Sửa sở thích
+              </Link>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {plan.summary} · ~{formatVnd(plan.est_cost_per_person_vnd)}/người (ước tính)
-            {draft?.server && ` · Phiên bản ${draft.server.version_no}`}
-          </p>
-          <div className="flex gap-2 pt-1">
-            <Link href="/plans" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              Đổi phương án
-            </Link>
-            <Link href="/onboarding" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              Sửa sở thích
-            </Link>
-          </div>
-        </header>
+        </HeroBanner>
 
         {guest && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -144,6 +159,23 @@ export function MyTrip({ places }: { places: Place[] }) {
           <MapIcon data-icon="inline-start" />
           Xem tuyến ngày {day.day_no} trên bản đồ
         </Link>
+        {/* Dẫn đường cả ngày theo đúng thứ tự lịch, xe máy, xuất phát từ nơi ở (chưa chọn: vị trí hiện tại). */}
+        {dayLinks.length > 0 && (
+          <div className="-mt-2 flex gap-2">
+            {dayLinks.map((href, i) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }), "flex-1")}
+              >
+                <Navigation data-icon="inline-start" />
+                {dayLinks.length > 1 ? `Dẫn đường chặng ${i + 1}` : `Dẫn đường cả ngày ${day.day_no}`}
+              </a>
+            ))}
+          </div>
+        )}
 
         {/* UX-07: gợi ý ăn, ở theo tuyến */}
         <div className="grid grid-cols-2 gap-2">
@@ -176,6 +208,7 @@ export function MyTrip({ places }: { places: Place[] }) {
           placesById={placesById}
           issues={plan.issues}
           onRemove={guest ? undefined : remove}
+          directions={{ origin: stay?.location ?? null }}
         />
 
         <p className="text-xs text-muted-foreground">

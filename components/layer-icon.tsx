@@ -19,20 +19,20 @@ const ICON: Record<Kind, LucideIcon> = {
 /** Nền đậm cho ghim. */
 export const KIND_BG: Record<Kind, string> = {
   heritage: "bg-amber-700",
-  attraction: "bg-sky-600",
+  attraction: "bg-teal-600",
   food: "bg-rose-600",
-  stay: "bg-violet-600",
-  hotel: "bg-violet-600",
+  stay: "bg-indigo-600",
+  hotel: "bg-indigo-600",
   homestay: "bg-emerald-600",
 };
 
 /** Nền nhạt cho ảnh giữ chỗ và icon trong danh sách. */
 export const KIND_SOFT: Record<Kind, string> = {
   heritage: "bg-amber-100 text-amber-800",
-  attraction: "bg-sky-100 text-sky-800",
+  attraction: "bg-teal-100 text-teal-800",
   food: "bg-rose-100 text-rose-800",
-  stay: "bg-violet-100 text-violet-800",
-  hotel: "bg-violet-100 text-violet-800",
+  stay: "bg-indigo-100 text-indigo-800",
+  hotel: "bg-indigo-100 text-indigo-800",
   homestay: "bg-emerald-100 text-emerald-800",
 };
 

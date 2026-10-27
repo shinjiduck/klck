@@ -338,9 +338,38 @@ export function estimateTravel(from: LatLng, to: LatLng): { km: number; minutes:
   return { km, minutes: Math.round((km / 20) * 60 + 10) };
 }
 
-/** AC-F8.3-06: đường dẫn chỉ đường Google Maps, không cần API key. */
-export function directionsUrl(p: LatLng): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+const coord = (p: LatLng) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+
+/**
+ * AC-F8.3-06: đường dẫn chỉ đường Google Maps (Maps URLs, không cần API key).
+ * Mặc định xe máy (two-wheeler) vì đó là phương tiện chính ở Huế; không có origin thì Google lấy vị trí hiện tại.
+ */
+export function directionsUrl(dest: LatLng, opts: { origin?: LatLng; waypoints?: LatLng[] } = {}): string {
+  const sp = new URLSearchParams({ api: "1", destination: coord(dest), travelmode: "two-wheeler" });
+  if (opts.origin) sp.set("origin", coord(opts.origin));
+  if (opts.waypoints?.length) sp.set("waypoints", opts.waypoints.map(coord).join("|"));
+  return `https://www.google.com/maps/dir/?${sp.toString()}`;
+}
+
+/** Google Maps nhận tối đa 9 điểm dừng giữa đường trong một link. */
+const MAX_WAYPOINTS = 9;
+
+/**
+ * Link dẫn đường cả ngày theo đúng thứ tự lịch. Quá 9 điểm dừng thì tách thành nhiều chặng nối tiếp
+ * (điểm cuối chặng trước là điểm đầu chặng sau). origin null → xuất phát từ vị trí hiện tại.
+ */
+export function dayDirectionsUrls(origin: LatLng | null, stops: LatLng[]): string[] {
+  const urls: string[] = [];
+  let from = origin;
+  let rest = stops;
+  while (rest.length > 0) {
+    const leg = rest.slice(0, MAX_WAYPOINTS + 1);
+    const dest = leg[leg.length - 1];
+    urls.push(directionsUrl(dest, { origin: from ?? undefined, waypoints: leg.slice(0, -1) }));
+    from = dest;
+    rest = rest.slice(leg.length);
+  }
+  return urls;
 }
 
 // ---------- Lọc ----------

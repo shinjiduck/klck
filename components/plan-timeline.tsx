@@ -2,12 +2,12 @@
 // AC-F1-03: mỗi mục có địa điểm, giờ bắt đầu–kết thúc, thời gian di chuyển, chi phí ước tính,
 // nguồn và ngày cập nhật. Dùng ở UX-04 (xem chi tiết phương án) và tab "Lịch của tôi".
 
-import { Car, Trash2 } from "lucide-react";
+import { Car, Navigation, Trash2 } from "lucide-react";
 import { cn } from "cn";
 import { KIND_SOFT, KindIcon, placeKind } from "@/components/layer-icon";
 import { WEEKDAY_SHORT } from "@/lib/labels";
-import { fmtMin, formatUpdatedMonth, formatVnd, weekdayOf } from "@/lib/places";
-import type { ConstraintIssue, Place, PlanDay, PlannedItemKind } from "@/lib/types";
+import { directionsUrl, fmtMin, formatUpdatedMonth, formatVnd, weekdayOf } from "@/lib/places";
+import type { ConstraintIssue, LatLng, Place, PlanDay, PlannedItemKind } from "@/lib/types";
 
 const KIND_LABEL: Record<PlannedItemKind, string> = {
   visit: "Tham quan",
@@ -36,12 +36,15 @@ export function PlanTimeline({
   placesById,
   issues = [],
   onRemove,
+  directions,
 }: {
   day: PlanDay;
   placesById: Map<string, Place>;
   issues?: ConstraintIssue[];
   /** Có thì hiện nút xóa từng mục (tab "Lịch của tôi"). */
   onRemove?: (index: number) => void;
+  /** Có thì mỗi chặng di chuyển là nút chỉ đường Google Maps; origin = nơi ở (null = vị trí hiện tại). */
+  directions?: { origin: LatLng | null };
 }) {
   return (
     <ol className="relative space-y-3 border-l border-dashed border-border pl-4">
@@ -72,12 +75,26 @@ export function PlanTimeline({
               )}
               aria-hidden
             />
-            {item.travel_min > 0 && (
-              <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-                <Car className="size-3" aria-hidden />
-                Di chuyển ~{item.travel_min} phút
-              </p>
-            )}
+            {item.travel_min > 0 &&
+              (directions ? (
+                // Chỉ đường chặng này: từ điểm trước (điểm đầu ngày: từ nơi ở, chưa chọn thì vị trí hiện tại).
+                <a
+                  href={directionsUrl(place.location, {
+                    origin: (prev && placesById.get(prev.place_id)?.location) || directions.origin || undefined,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-1 inline-flex items-center gap-1 rounded-full bg-primary/8 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/15"
+                >
+                  <Navigation className="size-3" aria-hidden />
+                  Di chuyển ~{item.travel_min} phút · Chỉ đường
+                </a>
+              ) : (
+                <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Car className="size-3" aria-hidden />
+                  Di chuyển ~{item.travel_min} phút
+                </p>
+              ))}
             <div className={cn("rounded-lg border p-2.5", problem && "border-destructive/50 bg-destructive/5")}>
               <div className="flex items-start gap-2.5">
                 <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", KIND_SOFT[kind])}>

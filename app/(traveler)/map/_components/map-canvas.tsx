@@ -37,7 +37,7 @@ export type MapView = { lng: number; lat: number; zoom: number };
 export type ItineraryOverlay = {
   /** Đổi khi chọn ngày khác hoặc lịch đổi điểm → bản đồ canh lại khung cho vừa tuyến. */
   key: string;
-  stops: { placeId: string; name: string; lat: number; lng: number; order: number; problem: boolean }[];
+  stops: { placeId: string; name: string; lat: number; lng: number; order: number; problem: boolean; kind: ReturnType<typeof placeKind> }[];
   /** [lng, lat][] */
   line: [number, number][];
   /** true = đường thẳng nối các điểm (chưa lấy được tuyến đường thật). */
@@ -123,17 +123,19 @@ export default function MapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itineraryKey, mapReady]);
 
+  // Khi xem tuyến: điểm trong lịch chỉ vẽ một lần (ghim đánh số bên dưới), không gộp vào cụm.
+  const stopIds = useMemo(() => new Set(itinerary?.stops.map((s) => s.placeId)), [itinerary?.stops]);
   const index = useMemo(() => {
     const sc = new Supercluster<PointProps>({ radius: 56, maxZoom: 16 });
     sc.load(
-      places.map((p) => ({
+      places.filter((p) => !stopIds.has(p.id)).map((p) => ({
         type: "Feature" as const,
         properties: { placeId: p.id },
         geometry: { type: "Point" as const, coordinates: [p.location.lng, p.location.lat] },
       })),
     );
     return sc;
-  }, [places]);
+  }, [places, stopIds]);
 
   // Cụm tính theo mức zoom hiện tại nhưng chỉ trên tập kết quả, nên ghim luôn khớp danh sách.
   const clusters = useMemo(() => index.getClusters([-180, -85, 180, 85], Math.round(zoom)), [index, zoom]);
@@ -232,7 +234,7 @@ export default function MapCanvas({
           if ("cluster" in c.properties && c.properties.cluster) {
             const { cluster_id: clusterId, point_count: count } = c.properties;
             return (
-              <Marker key={`c-${clusterId}`} longitude={lng} latitude={lat} anchor="center">
+              <Marker key={`c-${clusterId}`} longitude={lng} latitude={lat} anchor="center" style={{ opacity: itinerary ? 0.55 : 1 }}>
                 <button
                   type="button"
                   aria-label={`Cụm ${count} địa điểm, bấm để phóng to`}
@@ -253,7 +255,13 @@ export default function MapCanvas({
           const kind = placeKind(place);
           const selected = place.id === selectedId;
           return (
-            <Marker key={place.id} longitude={lng} latitude={lat} anchor="bottom" style={{ zIndex: selected ? 2 : 1 }}>
+            <Marker
+              key={place.id}
+              longitude={lng}
+              latitude={lat}
+              anchor="bottom"
+              style={{ zIndex: selected ? 2 : 1, opacity: itinerary && !selected ? 0.55 : 1 }}
+            >
               <button
                 type="button"
                 aria-label={place.name}
@@ -308,7 +316,7 @@ export default function MapCanvas({
 
         {mapReady &&
           itinerary?.stops.map((s) => (
-            <Marker key={`stop-${s.order}-${s.placeId}`} longitude={s.lng} latitude={s.lat} anchor="center" style={{ zIndex: 3 }}>
+            <Marker key={`stop-${s.order}-${s.placeId}`} longitude={s.lng} latitude={s.lat} anchor="bottom" style={{ zIndex: 3 }}>
               <button
                 type="button"
                 aria-label={`Điểm ${s.order} trong lịch: ${s.name}`}
@@ -318,11 +326,27 @@ export default function MapCanvas({
                   onSelect(s.placeId);
                 }}
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow-md",
-                  s.problem ? "bg-destructive" : "bg-blue-600",
+                  "relative flex origin-bottom flex-col items-center transition-transform",
+                  s.placeId === selectedId && "scale-125",
                 )}
               >
-                {s.order}
+                <span
+                  className={cn(
+                    "flex size-9 items-center justify-center rounded-full border-2 border-white text-white shadow-md",
+                    KIND_BG[s.kind],
+                  )}
+                >
+                  <KindIcon kind={s.kind} />
+                </span>
+                <span className={cn("-mt-1 size-2.5 rotate-45 border-r-2 border-b-2 border-white", KIND_BG[s.kind])} />
+                <span
+                  className={cn(
+                    "absolute -top-2 -right-2 flex size-5 items-center justify-center rounded-full border-2 border-white text-[11px] font-bold text-white shadow",
+                    s.problem ? "bg-destructive" : "bg-blue-600",
+                  )}
+                >
+                  {s.order}
+                </span>
               </button>
             </Marker>
           ))}

@@ -12,6 +12,7 @@ import { ChevronDown, Minus, Plus } from "lucide-react";
 import { z } from "zod";
 import { cn } from "cn";
 import { Chip } from "@/components/chip";
+import { HeroBanner } from "@/components/hero-banner";
 import { KindIcon } from "@/components/layer-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,12 +103,9 @@ function Form({ sights, initial }: { sights: Sight[]; initial: TripInput }) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex h-full flex-col" noValidate>
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-5 pb-6">
-        <header>
-          <h1 className="text-xl font-semibold">Lên lịch đi Huế</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cho HueTrip biết bạn thích gì, hệ thống sẽ gợi ý 3 phương án lịch trình. Chưa cần tài khoản.
-          </p>
-        </header>
+        <HeroBanner eyebrow="HueTrip · Cố đô Huế" title="Lên lịch đi Huế">
+          Cho HueTrip biết bạn thích gì, hệ thống gợi ý 3 phương án lịch trình hợp giờ mở cửa và ngân sách. Chưa cần tài khoản.
+        </HeroBanner>
 
         <Field label="Bạn thích gì?" hint="Chọn một hoặc nhiều" error={errors.interests?.message}>
           <ChipMulti
@@ -247,7 +245,7 @@ function Form({ sights, initial }: { sights: Sight[]; initial: TripInput }) {
       </div>
 
       <div className="shrink-0 border-t bg-background p-4">
-        <Button type="submit" size="lg" className="h-11 w-full text-base" disabled={isSubmitting}>
+        <Button type="submit" size="lg" className="h-12 w-full rounded-full text-base shadow-md shadow-primary/25" disabled={isSubmitting}>
           Gợi ý 3 phương án
         </Button>
       </div>

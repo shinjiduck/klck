@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Info, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Info, Landmark, Pencil, Sparkles, Trees, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
 import { PlanTimeline, dayLabel } from "@/components/plan-timeline";
@@ -141,6 +141,13 @@ function InputSummary({ input }: { input: TripInput }) {
   );
 }
 
+/** Màu và biểu tượng theo chủ đề phương án (AC-F1-02: 3 phương án phân biệt rõ). */
+const PLAN_THEME = {
+  heritage: { band: "bg-gradient-to-r from-amber-100 to-amber-50 text-amber-950", icon: Landmark, iconTone: "text-amber-700" },
+  balanced: { band: "bg-gradient-to-r from-teal-100 to-cyan-50 text-teal-950", icon: Trees, iconTone: "text-teal-700" },
+  food_relax: { band: "bg-gradient-to-r from-rose-100 to-orange-50 text-rose-950", icon: UtensilsCrossed, iconTone: "text-rose-700" },
+} as const;
+
 function PlanCard({
   plan,
   placesById,
@@ -157,13 +164,24 @@ function PlanCard({
   const errors = plan.issues.filter((i) => i.severity === "error");
   const warnings = plan.issues.filter((i) => i.severity === "warning");
   const choose = () => onChoose(plan);
+  const theme = PLAN_THEME[plan.plan_type];
+  const ThemeIcon = theme.icon;
 
   return (
-    <article className={cn("rounded-xl border bg-card p-4 shadow-sm", selected && "border-primary ring-1 ring-primary")}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold">{plan.title}</h2>
-          <p className="text-xs text-muted-foreground">{plan.summary}</p>
+    <article
+      className={cn(
+        "overflow-hidden rounded-3xl border bg-card shadow-sm",
+        selected && "border-primary ring-2 ring-primary/40",
+      )}
+    >
+      {/* Dải màu theo chủ đề phương án */}
+      <div className={cn("flex items-center gap-3 px-4 py-3", theme.band)}>
+        <span className="flex size-10 items-center justify-center rounded-2xl bg-white/80 shadow-sm">
+          <ThemeIcon className={cn("size-5", theme.iconTone)} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl leading-tight font-semibold">{plan.title}</h2>
+          <p className="text-xs opacity-75">{plan.summary}</p>
         </div>
         {plan.feasible ? (
           <Badge className="bg-emerald-600 text-white">
@@ -178,10 +196,11 @@ function PlanCard({
         )}
       </div>
 
+      <div className="p-4 pt-3">
       {/* Số điểm mỗi ngày (FR-F1-03) */}
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {plan.days.map((d) => (
-          <li key={d.day_no} className="rounded-md bg-muted px-2 py-1 text-xs">
+          <li key={d.day_no} className="rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
             {dayLabel(d)}: <span className="font-medium">{d.items.length} điểm</span>
           </li>
         ))}
@@ -196,10 +215,9 @@ function PlanCard({
         ))}
       </ul>
 
-      <div className="mt-3 rounded-lg bg-muted/60 p-3">
-        <p className="text-sm">
-          Chi phí ước tính: <span className="font-semibold">~{formatVnd(plan.est_cost_per_person_vnd)}/người</span>
-        </p>
+      <div className="mt-3 rounded-2xl bg-muted/70 p-3">
+        <p className="text-xs text-muted-foreground">Chi phí ước tính mỗi người</p>
+        <p className="font-[family-name:var(--font-display)] text-2xl font-semibold">~{formatVnd(plan.est_cost_per_person_vnd)}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           Chi phí ước tính, chưa được nhà cung cấp xác nhận. Gồm vé và ăn uống, chưa gồm lưu trú, di chuyển.
           {plan.unknown_price_count > 0 && ` Có ${plan.unknown_price_count} mục chưa rõ giá, chưa cộng vào tổng.`}
@@ -269,6 +287,7 @@ function PlanCard({
             Chọn dù còn vấn đề
           </Button>
         )}
+      </div>
       </div>
     </article>
   );

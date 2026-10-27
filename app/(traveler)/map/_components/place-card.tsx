@@ -11,7 +11,7 @@ import { useState } from "react";
 import { CalendarPlus, Car, Clock, Info, MapPin, Navigation, Route, Ticket, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
-import { KIND_SOFT, KindIcon, placeKind } from "@/components/layer-icon";
+import { KindIcon, placeKind } from "@/components/layer-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
@@ -20,16 +20,17 @@ import {
   LODGING_LABEL,
   UNKNOWN,
   directionsUrl,
-  estimateTravel,
   formatUpdatedMonth,
   getOpenStatus,
   getPriceText,
 } from "@/lib/places";
 import type { Category, LatLng, Place, PlaceMatch } from "@/lib/types";
 import { needsLogin, useAuth } from "@/lib/auth";
+import { formatRoadDistance, useRoadDistance } from "@/lib/map/use-road-distance";
 import { setPendingAction } from "@/lib/pending-action";
 import { preferenceFromDraft, useTripDraft } from "@/lib/trip-draft";
 import { useAiReason } from "@/lib/use-ai-reason";
+import { PlaceImage } from "@/components/place-image";
 import { AddToTrip, type TripContext } from "./add-to-trip";
 import { OPEN_TONE } from "./place-list-sheet";
 
@@ -112,8 +113,8 @@ function PlaceCardBody({
   const ai = useAiReason(place.id, preferenceFromDraft(draft), match != null);
   const status = getOpenStatus(place, now);
   const price = getPriceText(place);
-  const travel = userLocation ? estimateTravel(userLocation, place.location) : null;
-  const fromPrev = prevStop && prevStop.name !== place.name ? estimateTravel(prevStop.location, place.location) : null;
+  const travel = useRoadDistance(userLocation, place.location);
+  const fromPrev = useRoadDistance(prevStop && prevStop.name !== place.name ? prevStop.location : null, place.location);
   const categoryLabel =
     place.layer === "stay" && place.lodging_type
       ? LODGING_LABEL[place.lodging_type]
@@ -123,19 +124,7 @@ function PlaceCardBody({
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3">
-        {place.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={place.image_url} alt={place.name} className="h-36 w-full rounded-xl object-cover" />
-        ) : (
-          <div
-            role="img"
-            aria-label={`Chưa có ảnh ${place.name}`}
-            className={cn("flex h-36 w-full flex-col items-center justify-center gap-1 rounded-xl", KIND_SOFT[kind])}
-          >
-            <KindIcon kind={kind} className="size-10" />
-            <span className="text-xs">Chưa có ảnh</span>
-          </div>
-        )}
+        <PlaceImage place={place} className="h-44 w-full rounded-2xl" showLabel />
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary">
@@ -148,7 +137,7 @@ function PlaceCardBody({
           )}
         </div>
 
-        <DrawerTitle className="mt-2 text-lg font-semibold">{place.name}</DrawerTitle>
+        <DrawerTitle className="mt-2 text-2xl leading-tight font-semibold">{place.name}</DrawerTitle>
         <DrawerDescription className={cn("mt-0.5 text-sm font-medium", OPEN_TONE[status.state])}>
           {status.label}
         </DrawerDescription>
@@ -189,19 +178,9 @@ function PlaceCardBody({
           <Row
             icon={Route}
             label="Khoảng cách"
-            value={
-              travel
-                ? `${travel.km.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} km · khoảng ${travel.minutes} phút đi xe máy (ước tính)`
-                : "Bấm “Vị trí của tôi” trên bản đồ để xem"
-            }
+            value={travel ? `Từ vị trí của bạn: ${formatRoadDistance(travel)}` : "Bấm “Vị trí của tôi” trên bản đồ để xem"}
           />
-          {fromPrev && prevStop && (
-            <Row
-              icon={Car}
-              label={prevStop.label}
-              value={`khoảng ${fromPrev.minutes} phút đi xe máy (${fromPrev.km.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} km, ước tính)`}
-            />
-          )}
+          {fromPrev && prevStop && <Row icon={Car} label={prevStop.label} value={formatRoadDistance(fromPrev)} />}
           <Row icon={MapPin} label="Địa chỉ" value={[place.address, place.ward].filter(Boolean).join(", ") || UNKNOWN} />
         </dl>
 

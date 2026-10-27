@@ -14,7 +14,7 @@ import { ArrowLeft, BedDouble, Check, MapPin, Sparkles, UtensilsCrossed } from "
 import { toast } from "sonner";
 import { cn } from "cn";
 import { Chip } from "@/components/chip";
-import { KIND_SOFT, KindIcon, placeKind } from "@/components/layer-icon";
+import { KindIcon } from "@/components/layer-icon";
 import { dayLabel } from "@/components/plan-timeline";
 import { PriceBadge } from "@/components/price-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -34,6 +34,8 @@ import { replaceTripDraft, useTripDraft } from "@/lib/trip-draft";
 import { applyStay, previewInsert, removeItem } from "@/lib/trip-edit";
 import { TripConflictError, commitDraft, commitPlan, loadLatestTrip } from "@/lib/trip-sync";
 import type { GeneratedPlan, LodgingType, Place, TripInput } from "@/lib/types";
+import { HeroBanner } from "@/components/hero-banner";
+import { PlaceImage } from "@/components/place-image";
 
 type Tab = "food" | "stay";
 
@@ -62,7 +64,7 @@ export function SuggestView({ places }: { places: Place[] }) {
   if (!draft || !plan) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-        <p className="font-medium">Chưa có lịch trình</p>
+        <p className="text-2xl font-semibold">Chưa có lịch trình</p>
         <p className="text-sm text-muted-foreground">Gợi ý ăn, ở dựa trên tuyến của lịch. Hãy chọn một phương án trước.</p>
         <Link href={draft ? "/plans" : "/onboarding"} className={buttonVariants()}>
           {draft ? "Xem 3 phương án" : "Lên lịch trình"}
@@ -141,12 +143,9 @@ export function SuggestView({ places }: { places: Place[] }) {
           <ArrowLeft className="size-4" aria-hidden />
           Lịch của tôi
         </Link>
-        <header>
-          <h1 className="text-xl font-semibold">Gợi ý ăn, ở theo tuyến</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {plan.title} · Xuất phát mỗi ngày từ <b>{originLabel(input, byId)}</b>
-          </p>
-        </header>
+        <HeroBanner eyebrow={plan.title} title="Gợi ý ăn, ở theo tuyến">
+          Xuất phát mỗi ngày từ <b className="text-accent">{originLabel(input, byId)}</b>
+        </HeroBanner>
 
         <div role="tablist" className="grid grid-cols-2 rounded-lg bg-muted p-1 text-sm font-medium">
           {(
@@ -388,20 +387,17 @@ function SuggestionCard({
   actionDisabled?: boolean;
   onAction: () => void;
 }) {
-  const kind = placeKind(place);
   return (
-    <article className={cn("rounded-xl border p-3", sponsored && "border-amber-300 bg-amber-50/50")}>
+    <article className={cn("rounded-2xl border bg-card p-3 shadow-sm", sponsored && "border-amber-300 bg-amber-50/50")}>
       {sponsored && (
         <p className="mb-2 inline-block rounded bg-amber-200 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
           Tài trợ / Đối tác
         </p>
       )}
       <div className="flex gap-2.5">
-        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", KIND_SOFT[kind])}>
-          <KindIcon kind={kind} />
-        </span>
+        <PlaceImage place={place} className="size-16 shrink-0 rounded-xl" iconClassName="size-6" />
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-sm font-medium">{place.name}</p>
+          <p className="text-[15px] leading-snug font-semibold">{place.name}</p>
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
           <PriceBadge place={place} />
           <ul className="flex flex-wrap gap-1">
