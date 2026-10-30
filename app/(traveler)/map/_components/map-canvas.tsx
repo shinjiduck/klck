@@ -37,11 +37,38 @@ export type MapView = { lng: number; lat: number; zoom: number };
 export type ItineraryOverlay = {
   /** Đổi khi chọn ngày khác hoặc lịch đổi điểm → bản đồ canh lại khung cho vừa tuyến. */
   key: string;
-  stops: { placeId: string; name: string; lat: number; lng: number; order: number; problem: boolean; kind: ReturnType<typeof placeKind> }[];
+  stops: ItineraryStop[];
+  /** Chặng i nối stops[i] → stops[i + 1]. */
+  legs: ItineraryLeg[];
+  /** Chặng đang xem (null = toàn tuyến): tô đậm + mũi tên hướng đi, các chặng khác mờ. */
+  activeLeg: number | null;
+};
+
+export type ItineraryStop = {
+  placeId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  order: number;
+  problem: boolean;
+  kind: ReturnType<typeof placeKind>;
+};
+
+export type ItineraryLeg = {
+  from: ItineraryStop;
+  to: ItineraryStop;
   /** [lng, lat][] */
   line: [number, number][];
-  /** true = đường thẳng nối các điểm (chưa lấy được tuyến đường thật). */
-  lineIsEstimate: boolean;
+  /** true = đường thẳng nối hai điểm (chưa lấy được tuyến đường thật). */
+  isEstimate: boolean;
+  km: number;
+  minutes: number;
+};
+
+/** Khi xem tuyến: chừa thêm chỗ dưới cho thanh chặng (LegBar). */
+const routePadding = () => {
+  const p = viewPadding();
+  return { ...p, bottom: p.bottom + (window.matchMedia("(min-width: 1024px)").matches ? 110 : 210) };
 };
 
 export type MapCanvasProps = {
@@ -105,23 +132,50 @@ export default function MapCanvas({
   }, [resetViewKey]);
 
   // Canh khung bản đồ vừa với tuyến khi chọn ngày (chừa chỗ cho thanh trên và ngăn kéo dưới).
+  // Xem một chặng: canh khung vừa hai điểm của chặng đó.
   const itineraryKey = itinerary?.key;
+  const activeLeg = itinerary?.activeLeg ?? null;
+  const activeLegReal = activeLeg != null && itinerary?.legs[activeLeg]?.isEstimate === false;
   useEffect(() => {
     if (!mapReady || !itinerary || itinerary.stops.length === 0) return;
-    const lngs = itinerary.stops.map((s) => s.lng);
-    const lats = itinerary.stops.map((s) => s.lat);
+    const leg = activeLeg == null ? null : itinerary.legs[activeLeg];
+    // Chặng: canh theo cả đường đi (đường thật có thể vòng ra ngoài hai điểm đầu–cuối).
+    const pts: [number, number][] = leg ? leg.line : itinerary.stops.map((s) => [s.lng, s.lat]);
+    const lngs = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
     moveCamera((m) =>
       m.fitBounds(
         [
           [Math.min(...lngs), Math.min(...lats)],
           [Math.max(...lngs), Math.max(...lats)],
         ],
-        { padding: viewPadding(), maxZoom: 15, duration: 800 },
+        { padding: routePadding(), maxZoom: leg ? 16 : 15, duration: 800 },
       ),
     );
-    // Chỉ canh lại khi đổi ngày/đổi điểm, không canh lại khi tuyến đường thật vừa tải về.
+    // Canh lại khi đổi ngày/đổi điểm/đổi chặng, và khi đường thật của chặng đang xem vừa tải về.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itineraryKey, mapReady]);
+  }, [itineraryKey, activeLeg, activeLegReal, mapReady]);
+
+  const activeLegStops =
+    itinerary && activeLeg != null && itinerary.legs[activeLeg]
+      ? [itinerary.legs[activeLeg].from.order, itinerary.legs[activeLeg].to.order]
+      : null;
+
+  // Mỗi chặng một feature; state: 2 = đang xem, 1 = toàn tuyến, 0 = chặng khác khi đang xem một chặng.
+  const legFeatures = useMemo(() => {
+    if (!itinerary) return null;
+    return {
+      type: "FeatureCollection" as const,
+      features: itinerary.legs.map((l, i) => ({
+        type: "Feature" as const,
+        properties: {
+          state: itinerary.activeLeg == null ? 1 : i === itinerary.activeLeg ? 2 : 0,
+          estimate: l.isEstimate ? 1 : 0,
+        },
+        geometry: { type: "LineString" as const, coordinates: l.line },
+      })),
+    };
+  }, [itinerary]);
 
   // Khi xem tuyến: điểm trong lịch chỉ vẽ một lần (ghim đánh số bên dưới), không gộp vào cụm.
   const stopIds = useMemo(() => new Set(itinerary?.stops.map((s) => s.placeId)), [itinerary?.stops]);
@@ -289,34 +343,72 @@ export default function MapCanvas({
           );
         })}
 
-        {mapReady && itinerary && itinerary.line.length > 1 && (
-          <Source
-            id="itinerary"
-            type="geojson"
-            data={{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: itinerary.line } }}
-          >
+        {mapReady && legFeatures && legFeatures.features.length > 0 && (
+          <Source id="itinerary" type="geojson" data={legFeatures}>
+            {/* Chặng mờ vẽ trước, chặng đang xem vẽ sau cùng để nằm trên khi trùng đường. */}
             <Layer
               id="itinerary-casing"
               type="line"
-              layout={{ "line-cap": "round", "line-join": "round" }}
-              paint={{ "line-color": "#ffffff", "line-width": 7 }}
+              layout={{ "line-cap": "round", "line-join": "round", "line-sort-key": ["get", "state"] }}
+              paint={{
+                "line-color": "#ffffff",
+                "line-width": ["match", ["get", "state"], 2, 10, 1, 7, 5],
+                "line-opacity": ["match", ["get", "state"], 0, 0.5, 1],
+              }}
             />
             <Layer
               id="itinerary-line"
               type="line"
+              filter={["==", ["get", "estimate"], 0]}
+              layout={{ "line-cap": "round", "line-join": "round", "line-sort-key": ["get", "state"] }}
+              paint={{
+                "line-color": ["match", ["get", "state"], 0, "#94a3b8", "#2563eb"],
+                "line-width": ["match", ["get", "state"], 2, 6, 1, 4, 3],
+                "line-opacity": ["match", ["get", "state"], 0, 0.6, 1],
+              }}
+            />
+            {/* Chặng chưa có đường thật: nét đứt (dasharray không dùng được biểu thức theo feature). */}
+            <Layer
+              id="itinerary-line-estimate"
+              type="line"
+              filter={["==", ["get", "estimate"], 1]}
               layout={{ "line-cap": "round", "line-join": "round" }}
               paint={{
-                "line-color": "#2563eb",
-                "line-width": 4,
-                ...(itinerary.lineIsEstimate ? { "line-dasharray": [1.5, 1.5] } : {}),
+                "line-color": ["match", ["get", "state"], 0, "#94a3b8", "#2563eb"],
+                "line-width": ["match", ["get", "state"], 2, 5, 3],
+                "line-dasharray": [1.5, 1.5],
               }}
+            />
+            {/* Mũi tên hướng đi dọc tuyến: chỉ trên chặng đang xem (hoặc mọi chặng khi xem toàn tuyến). */}
+            <Layer
+              id="itinerary-arrows"
+              type="symbol"
+              filter={[">", ["get", "state"], 0]}
+              layout={{
+                "symbol-placement": "line",
+                "symbol-spacing": 60,
+                "text-field": ">",
+                "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+                "text-size": ["match", ["get", "state"], 2, 30, 22],
+                "text-keep-upright": false,
+                "text-rotation-alignment": "map",
+                "text-allow-overlap": true,
+                "text-ignore-placement": true,
+              }}
+              paint={{ "text-color": "#ffffff", "text-halo-color": "#1d4ed8", "text-halo-width": 1.5 }}
             />
           </Source>
         )}
 
         {mapReady &&
           itinerary?.stops.map((s) => (
-            <Marker key={`stop-${s.order}-${s.placeId}`} longitude={s.lng} latitude={s.lat} anchor="bottom" style={{ zIndex: 3 }}>
+            <Marker
+              key={`stop-${s.order}-${s.placeId}`}
+              longitude={s.lng}
+              latitude={s.lat}
+              anchor="bottom"
+              style={{ zIndex: 3, opacity: activeLegStops && !activeLegStops.includes(s.order) ? 0.45 : 1 }}
+            >
               <button
                 type="button"
                 aria-label={`Điểm ${s.order} trong lịch: ${s.name}`}

@@ -11,17 +11,20 @@
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { MapPinOff, Route } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPinOff, Navigation, Route } from "lucide-react";
 import { cn } from "cn";
 import { placeKind } from "@/components/layer-icon";
+import { buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { getMapProvider } from "@/lib/map/provider";
+import { getMapProvider, type RouteResult } from "@/lib/map/provider";
 import { takePendingAction } from "@/lib/pending-action";
 import {
   DEFAULT_FILTERS,
   HUE_CENTER,
   LAYERS,
   countActiveFilters,
+  directionsUrl,
+  estimateTravel,
   filtersFromSearchParams,
   filtersToSearchParams,
   getPlaceMatch,
@@ -36,7 +39,7 @@ import {
 import { preferenceFromDraft, useTripDraft } from "@/lib/trip-draft";
 import type { Category, LatLng, Place } from "@/lib/types";
 import { FilterSheet } from "./filter-sheet";
-import type { ItineraryOverlay, MapView } from "./map-canvas";
+import type { ItineraryLeg, ItineraryOverlay, MapView } from "./map-canvas";
 import { MapTopBar } from "./map-top-bar";
 import { PlaceCard } from "./place-card";
 import { PlaceListSheet } from "./place-list-sheet";
@@ -187,14 +190,18 @@ export function HueMap({ places, categories }: Props) {
   }, [viewDay, plan, places]);
   const stopsKey = stops.map((s) => `${s.lng},${s.lat}`).join(";");
 
-  // Tuyến đường thật qua MapProvider; khi chưa có (đang tải / lỗi) thì nối thẳng các điểm.
-  const [route, setRoute] = useState<{ key: string; line: [number, number][] } | null>(null);
+  // Tuyến đường thật qua MapProvider, lấy riêng từng chặng để xem lần lượt (chặng đi – về trùng đường
+  // không đè lên nhau). Chặng chưa có (đang tải / lỗi) thì nối thẳng và ghi "ước tính".
+  const [legRoutes, setLegRoutes] = useState<Record<string, RouteResult>>({});
   useEffect(() => {
     const provider = getMapProvider();
     if (!provider || stops.length < 2) return;
     let cancelled = false;
-    provider.route(stops, "driving").then((r) => {
-      if (!cancelled && r) setRoute({ key: stopsKey, line: r.coordinates });
+    stops.slice(1).forEach((to, i) => {
+      const from = stops[i];
+      provider.route([from, to], "driving").then((r) => {
+        if (!cancelled && r) setLegRoutes((m) => ({ ...m, [legKey(from, to)]: r }));
+      });
     });
     return () => {
       cancelled = true;
@@ -203,13 +210,30 @@ export function HueMap({ places, categories }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopsKey]);
 
+  const legs: ItineraryLeg[] = stops.slice(1).map((to, i) => {
+    const from = stops[i];
+    const r = legRoutes[legKey(from, to)];
+    if (r) {
+      return {
+        from,
+        to,
+        line: r.coordinates,
+        isEstimate: false,
+        km: r.distance_m / 1000,
+        minutes: Math.max(1, Math.round(r.duration_s / 60)),
+      };
+    }
+    const est = estimateTravel(from, to);
+    return { from, to, line: [[from.lng, from.lat], [to.lng, to.lat]], isEstimate: true, ...est };
+  });
+
+  // Chặng đang xem (null = toàn tuyến); gắn với stopsKey nên đổi ngày/sửa lịch thì tự về toàn tuyến.
+  const [legView, setLegView] = useState<{ key: string; index: number } | null>(null);
+  const activeLeg = legView?.key === stopsKey && legView.index < legs.length ? legView.index : null;
+  const setActiveLeg = (index: number | null) => setLegView(index == null ? null : { key: stopsKey, index });
+
   const itinerary: ItineraryOverlay | null = viewDay
-    ? {
-        key: `${viewDay.day_no}:${stopsKey}`,
-        stops,
-        line: route?.key === stopsKey ? route.line : stops.map((s) => [s.lng, s.lat]),
-        lineIsEstimate: route?.key !== stopsKey,
-      }
+    ? { key: `${viewDay.day_no}:${stopsKey}`, stops, legs, activeLeg }
     : null;
 
   // Ghi từ khóa lên URL sau 300 ms ngừng gõ.
@@ -276,6 +300,9 @@ export function HueMap({ places, categories }: Props) {
       {plan && mapAvailable && (
         <DayPicker days={plan.days.map((d) => d.day_no)} value={viewDay?.day_no ?? null} onChange={setViewDay} />
       )}
+      {mapAvailable && viewDay && legs.length > 0 && (
+        <LegBar legs={legs} active={activeLeg} onChange={setActiveLeg} onSelectStop={setSelectedId} />
+      )}
 
       <MapTopBar
         filters={filters}
@@ -328,6 +355,101 @@ export function HueMap({ places, categories }: Props) {
           if (mapAvailable) setViewDay(dayNo); // AC-F8.3-04: hiện ngay tuyến đã cập nhật
         }}
       />
+    </div>
+  );
+}
+
+const legKey = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => `${a.lng},${a.lat};${b.lng},${b.lat}`;
+
+const fmtKm = (km: number) => km.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+
+/**
+ * Xem tuyến theo từng chặng: ‹ › chuyển chặng, chặng đang xem tô đậm có mũi tên hướng đi,
+ * kèm quãng đường, thời gian và nút chỉ đường Google Maps (xe máy) cho riêng chặng đó.
+ */
+function LegBar({
+  legs,
+  active,
+  onChange,
+  onSelectStop,
+}: {
+  legs: ItineraryLeg[];
+  active: number | null;
+  onChange: (i: number | null) => void;
+  onSelectStop: (placeId: string) => void;
+}) {
+  const leg = active == null ? null : legs[active];
+  const totalKm = legs.reduce((s, l) => s + l.km, 0);
+  const totalMin = legs.reduce((s, l) => s + l.minutes, 0);
+  const anyEstimate = legs.some((l) => l.isEstimate);
+  const navBtn =
+    "flex size-9 shrink-0 items-center justify-center rounded-full border bg-background text-foreground hover:bg-muted disabled:opacity-40";
+  return (
+    <div className="absolute right-3 bottom-[15.5rem] left-3 z-10 rounded-2xl border bg-background/95 p-2.5 shadow-lg backdrop-blur lg:right-auto lg:bottom-24 lg:left-[396px] lg:w-[360px]">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={navBtn}
+          aria-label="Chặng trước"
+          disabled={active == null}
+          onClick={() => onChange(active === 0 ? null : (active ?? 0) - 1)}
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <div className="min-w-0 flex-1 text-center" aria-live="polite">
+          {leg ? (
+            <>
+              <p className="text-[11px] font-medium text-muted-foreground">
+                Chặng {active! + 1}/{legs.length}
+              </p>
+              {/* Hai dòng để tên dài không bị cắt mất điểm đến. */}
+              <button
+                type="button"
+                className="block w-full truncate text-xs text-muted-foreground hover:underline"
+                onClick={() => onSelectStop(leg.from.placeId)}
+              >
+                Từ {leg.from.order}. {leg.from.name}
+              </button>
+              <button
+                type="button"
+                className="block w-full truncate text-sm font-semibold hover:underline"
+                onClick={() => onSelectStop(leg.to.placeId)}
+              >
+                Đến {leg.to.order}. {leg.to.name}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                {fmtKm(leg.km)} km · khoảng {leg.minutes} phút {leg.isEstimate ? "(ước tính)" : "(theo đường thực tế)"}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold">Toàn tuyến · {legs.length} chặng</p>
+              <p className="text-xs text-muted-foreground">
+                {fmtKm(totalKm)} km · khoảng {totalMin} phút di chuyển{anyEstimate ? " (ước tính)" : ""} · bấm › để đi từng chặng
+              </p>
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          className={navBtn}
+          aria-label={active === legs.length - 1 ? "Về toàn tuyến" : "Chặng tiếp theo"}
+          onClick={() => onChange(active == null ? 0 : active === legs.length - 1 ? null : active + 1)}
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+      {leg && (
+        <a
+          href={directionsUrl(leg.to, { origin: leg.from })}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(buttonVariants({ size: "sm" }), "mt-2 w-full")}
+        >
+          <Navigation data-icon="inline-start" />
+          Chỉ đường chặng này (xe máy)
+        </a>
+      )}
     </div>
   );
 }
