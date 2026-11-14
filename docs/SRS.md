@@ -51,7 +51,7 @@ SRS bao quát toàn bộ chức năng F1–F8 và ba phân hệ hỗ trợ SUP-1
 
 ## Bối cảnh hệ thống
 
-HueTrip là ứng dụng web dạng PWA, ưu tiên điện thoại. Giao diện lấy bản đồ làm trung tâm. Hệ thống tự lưu dữ liệu địa điểm của mình (không dùng API địa điểm bên ngoài làm nguồn chính), gọi dịch vụ bản đồ qua một lớp adapter và gọi Claude API để viết lời giải thích cho gợi ý.
+HueTrip là ứng dụng web dạng PWA, ưu tiên điện thoại. Giao diện lấy bản đồ làm trung tâm. Hệ thống tự lưu dữ liệu địa điểm của mình (không dùng API địa điểm bên ngoài làm nguồn chính). Cho phép dùng nguồn bên ngoài (OpenStreetMap, Goong/Mapbox Search) làm **nguồn phụ** để (a) admin nhập hàng loạt thành bản nháp chờ duyệt (FR-ADM-08), (b) gợi ý khi tìm kiếm địa điểm chưa có trong hệ thống (FR-F8-15). Hệ thống gọi dịch vụ bản đồ qua một lớp adapter và gọi Claude API để viết lời giải thích cho gợi ý.
 
 ## Tác nhân
 
@@ -78,7 +78,8 @@ Quyền chi tiết của từng tác nhân được đặc tả ở chương **P
 
 ## Giả định và phụ thuộc
 
-- Dữ liệu 20–30 điểm (GĐ1) và 30–50 điểm (GĐ2) được nhập và kiểm tra thủ công.
+- Dữ liệu 20–30 điểm (GĐ1) và 30–50 điểm (GĐ2) được nhập và kiểm tra thủ công; đây là các điểm "đã xác minh" dùng để demo lập lịch.
+- Ngoài ra, hệ thống nhập hàng loạt địa điểm từ OpenStreetMap (giấy phép ODbL, ghi công "© OpenStreetMap contributors") làm bản nháp; chỉ những điểm admin đã kiểm tra và bổ sung giá, giờ mở cửa mới được xuất bản.
 - Nhà cung cấp bản đồ cuối cùng chưa chốt; thiết kế không phụ thuộc vào một nhà cung cấp.
 - Dữ liệu thời tiết lấy từ Open-Meteo qua `WeatherProvider Adapter`; khi nguồn lỗi, admin có thể kích hoạt thủ công hoặc dùng chế độ giả lập.
 - Tài khoản Quản trị viên đầu tiên được tạo thủ công trong cơ sở dữ liệu; không có chức năng tự đăng ký làm admin.
@@ -291,6 +292,7 @@ Hệ thống có **hai tầng quyền** độc lập:
 | FR-F8-12 | Gợi ý theo ngữ cảnh: trời mưa ưu tiên điểm trong nhà, gần giờ đóng cửa thì cảnh báo, gợi ý điểm ngắm hoàng hôn vào cuối chiều. | P2 | GĐ2 |
 | FR-F8-13 | "Bản đồ của tôi": danh sách Muốn đi / Đã đi, tự đặt tên và màu. | P2 | GĐ3 |
 | FR-F8-14 | Vùng thuận tiện để chọn nơi ở theo toàn bộ lịch trình; lưu bộ lọc yêu thích. | P2 | GĐ3 |
+| FR-F8-15 | Khi tìm kiếm không có kết quả trong hệ thống, hiển thị gợi ý từ nguồn bên ngoài qua `MapProvider.geocode` (Goong/Mapbox Search), ghi rõ nguồn; gợi ý chỉ để xem vị trí và chỉ đường, không thêm vào lịch, không lưu vào cơ sở dữ liệu. | P2 | GĐ2 |
 
 ### Tiêu chí chấp nhận
 
@@ -463,10 +465,12 @@ Hệ thống có **hai tầng quyền** độc lập:
 | FR-ADM-05 | Trang người dùng: xem danh sách tài khoản, đổi vai trò (chỉ admin). | P2 | GĐ1 |
 | FR-ADM-06 | Trang nhật ký thao tác (AUDIT_LOG), lọc theo người thực hiện và ngày. | P2 | GĐ1 |
 | FR-ADM-07 | Công tắc "Giả lập trời mưa" (gắn với FR-F2-07). | P2 | GĐ1 (tùy chọn) |
+| FR-ADM-08 | Nhập hàng loạt từ nguồn bên ngoài (OpenStreetMap qua Overpass API; GĐ2 thêm Goong/Mapbox Search): công cụ sinh file CSV theo mẫu FR-ADM-04, mọi dòng ở trạng thái **Nháp**, giá `unknown`, nguồn ghi tên nguồn + giấy phép + link đối tượng gốc. Điểm trùng tên hoặc trùng tên trong bán kính 100 m với điểm đã có bị bỏ, không ghi đè. | P2 | GĐ1 |
 
 - **AC-ADM-01** – *Cho trước* thiếu nguồn hoặc ngày cập nhật, *Khi* bấm Xuất bản, *Thì* hệ thống báo lỗi ngay tại trường thiếu và chỉ cho lưu nháp.
 - **AC-ADM-02** – *Khi* nhập file CSV có dòng sai định dạng tọa độ, *Thì* hệ thống liệt kê số dòng lỗi và không lưu dòng đó.
 - **AC-ADM-03** – Địa điểm ở trạng thái Nháp hoặc Ẩn không xuất hiện trên Hue Map và không trả về qua API công khai.
+- **AC-ADM-04** – *Khi* nhập dữ liệu từ nguồn bên ngoài (FR-ADM-08), *Thì* không điểm nào được xuất bản tự động, và không điểm đã có nào bị ghi đè; điểm bị bỏ vì trùng được liệt kê trong báo cáo nhập.
 
 **Tiêu chí chấp nhận cho admin**
 
